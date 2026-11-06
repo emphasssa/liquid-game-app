@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Modern OS Liquid Glass</title>
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Font: Quicksand -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ================= 1. SYSTEM PREVENTIONS ================= */
+    html, body {
+      margin: 0; padding: 0; 
+      width: 100vw; height: 100vh;
+      overflow: hidden; 
+      background: #000;
+      font-family: 'Quicksand', sans-serif;
+      overscroll-behavior: none; 
+      touch-action: none;
+      user-select: none; 
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    * { box-sizing: border-box; }
+
+    /* ================= 2. THEMES & BACKGROUND PULSE ================= */
+    .bg-layer {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.8s ease-in-out; z-index: 0;
+    }
+    .bg-layer.active { opacity: 1; }
+
+    #bg0 { background: linear-gradient(135deg, #d4b4fa 0%, #a4cfff 100%); }
+    #bg1 { background: linear-gradient(135deg, #fcc9ed 0%, #b8cff1 100%); }
+    #bg2 { background: linear-gradient(135deg, #9efacc 0%, #99defa 100%); }
+    #bg3 { background: linear-gradient(135deg, #ffe2b8 0%, #fac1ad 100%); }
+
+    /* Flash overlay for crafting success */
+    .bg-flash {
+      position: absolute; inset: 0; background: #fff;
+      opacity: 0; pointer-events: none; z-index: 5;
+      transition: opacity 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .bg-flash.flash { opacity: 0.8; transition: none; }
+
+    /* ================= 3. DYNAMIC ISLAND ================= */
+    .dynamic-island {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 100px; height: 32px; border-radius: 16px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.2);
+      /* OS Level Spring Physics */
+      transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      overflow: hidden; pointer-events: none;
+    }
+    .dynamic-island.expanded {
+      width: 220px; height: 50px; border-radius: 25px;
+      background: rgba(0, 0, 0, 0.85);
+    }
+    .island-content {
+      color: #fff; font-weight: 700; font-size: 14px;
+      opacity: 0; transform: scale(0.8) translateY(10px);
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+    }
+    .dynamic-island.expanded .island-content {
+      opacity: 1; transform: scale(1) translateY(0); transition-delay: 0.1s;
+    }
+
+    /* ================= 4. LAYOUT & GLASS ================= */
+    .app-container {
+      position: relative; z-index: 10; 
+      display: flex; width: 100vw; height: 100vh;
+      perspective: 1000px; /* For 3D Parallax */
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Shimmer Effect (Light Sweep) */
+    .shimmer { position: relative; overflow: hidden; }
+    .shimmer::after {
+      content: ''; position: absolute; top: 0; left: -150%; 
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+      transform: skewX(-25deg);
+      animation: shimmerSweep 4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes shimmerSweep {
+      0% { left: -150%; }
+      50% { left: 200%; }
+      100% { left: 200%; }
+    }
+
+    /* ================= 5. LEFT NAVIGATION (Stable) ================= */
+    .left-nav {
+      width: 70px; height: 100%; display: flex; 
+      justify-content: center; align-items: center;
+      position: relative; z-index: 20;
+    }
+    .nav-track {
+      width: 18px; height: 50%; border-radius: 12px;
+      position: relative; display: flex; flex-direction: column;
+      justify-content: space-between; align-items: center;
+      padding: 12px 0; touch-action: none;
+    }
+    .nav-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s;
+    }
+    .nav-dot.active {
+      background: rgba(255, 255, 255, 1);
+      transform: scale(2.2);
+      box-shadow: 0 0 10px rgba(255,255,255,0.8);
+    }
+    .nav-thumb {
+      position: absolute; left: -7px; 
+      width: 32px; height: 32px; border-radius: 16px; 
+      background: rgba(255, 255, 255, 0.95);
+      border: 1.5px solid #fff;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      top: 0; pointer-events: none; 
+      transform: translateY(0);
+    }
+
+    /* ================= 6. CONTENT AREA & 3D TILT ================= */
+    .content-area {
+      flex: 1; position: relative; display: flex;
+      justify-content: center; align-items: center;
+    }
+    
+    .screen {
+      position: absolute; inset: 0; display: flex;
+      justify-content: center; align-items: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.5s ease;
+      z-index: 5;
+    }
+    .screen.active { opacity: 1; pointer-events: all; }
+
+    /* The wrapper that receives the 3D tilt */
+    .tilt-card {
+      padding: 30px; border-radius: 36px;
+      transition: transform 0.15s ease-out; /* snappy follow */
+      will-change: transform;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transform: rotateX(0) rotateY(0) scale3d(1, 1, 1);
+    }
+    /* Intro animation for the card */
+    .screen:not(.active) .tilt-card { transform: scale3d(0.9, 0.9, 0.9) translateY(20px); transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .screen.active .tilt-card { transform: scale3d(1, 1, 1) translateY(0); }
+
+    .interactive { pointer-events: all; position: relative; z-index: 10; touch-action: none; }
+
+    /* --- Screen 1: Liquid Action Button --- */
+    .s1-btn {
+      padding: 22px 45px; border-radius: 35px;
+      font-size: 18px; font-weight: 700; color: #333;
+      text-transform: uppercase; letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1), inset 0 2px 5px rgba(255,255,255,0.8);
+      /* OS Spring */
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), border-radius 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .s1-btn.squish {
+      transform: scale(0.9) scaleX(1.1);
+      border-radius: 45px 25px 45px 25px;
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    /* --- Screen 2: Precision Slider --- */
+    .s2-wrapper { width: 260px; padding: 25px 20px; border-radius: 28px; }
+    .s2-track-container { position: relative; height: 30px; display: flex; align-items: center; }
+    .s2-track-line {
+      position: absolute; left: 0; right: 0; height: 8px; 
+      border-radius: 4px; background: rgba(255, 255, 255, 0.25);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .s2-dots {
+      position: absolute; left: 0; right: 0; height: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+      pointer-events: none; padding: 0 4px;
+    }
+    .s2-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      transition: background 0.3s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .s2-dot.active { background: #fff; transform: scale(1.6); box-shadow: 0 0 5px #fff; }
+    
+    .s2-thumb {
+      width: 44px; height: 30px; border-radius: 15px;
+      background: #fff; position: absolute; left: 0;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.15), inset 0 -2px 4px rgba(0,0,0,0.1);
+      /* Thumb spring physics added only when snapping, managed by JS */
+      transform: translateX(0);
+    }
+
+    /* --- Screen 3: Crafting Flask --- */
+    .s3-container { position: relative; width: 150px; height: 150px; display: flex; justify-content: center; align-items: center; }
+    .s3-flask {
+      width: 110px; height: 110px; border-radius: 50%;
+      overflow: hidden; display: flex; align-items: flex-end;
+      position: relative; z-index: 10;
+      box-shadow: inset 0 -5px 15px rgba(255,255,255,0.6), 0 10px 30px rgba(0,0,0,0.1);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .s3-flask.pressing { transform: scale(0.95); }
+    .s3-liquid {
+      width: 100%; height: 100%; background: #fff;
+      transform-origin: bottom; transform: scaleY(0);
+      will-change: transform;
+    }
+    .s3-label {
+      position: absolute; top: 170px; color: #fff; 
+      font-weight: 700; opacity: 0.9; font-size: 15px; letter-spacing: 1px;
+    }
+    .burst-ring {
+      position: absolute; top: 50%; left: 50%;
+      width: 110px; height: 110px; border: 4px solid rgba(255,255,255,1);
+      border-radius: 50%; pointer-events: none; z-index: 5;
+      transform: translate(-50%, -50%) scale(1); opacity: 1;
+      animation: burstAnim 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes burstAnim {
+      100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; border-width: 0px; }
+    }
+
+    /* --- Screen 4: Magnetic Toggles --- */
+    .s4-wrapper { display: flex; flex-direction: column; gap: 28px; }
+    .toggle-track {
+      width: 120px; height: 48px; border-radius: 24px;
+      position: relative; padding: 0 5px; display: flex; align-items: center;
+      transition: background 0.4s ease;
+      box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .toggle-track.on { background: rgba(255, 255, 255, 0.65); }
+    .toggle-thumb {
+      width: 38px; height: 38px; border-radius: 19px;
+      background: #fff; position: absolute; left: 5px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      /* OS Spring */
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.2s ease;
+    }
+    .toggle-track:active .toggle-thumb { width: 46px; } /* Squash on drag */
+
+  </style>
+</head>
+<body>
+
+  <!-- Backgrounds & Effects -->
+  <div id="bg0" class="bg-layer active"></div>
+  <div id="bg1" class="bg-layer"></div>
+  <div id="bg2" class="bg-layer"></div>
+  <div id="bg3" class="bg-layer"></div>
+  <div class="bg-flash" id="bgFlash"></div>
+
+  <!-- OS Dynamic Island -->
+  <div class="dynamic-island" id="dynamicIsland">
+    <div class="island-content" id="islandText">Notification</div>
+  </div>
+
+  <div class="app-container" id="appContainer">
+    
+    <!-- Left Navigation -->
+    <div class="left-nav">
+      <div class="nav-track glass-panel shimmer" id="navTrack">
+        <div class="nav-dot active"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-thumb" id="navThumb"></div>
+      </div>
+    </div>
+
+    <!-- Content Area for 3D Tilt -->
+    <div class="content-area" id="contentArea">
+
+      <!-- Screen 0: Action Button -->
+      <div class="screen active">
+        <div class="tilt-card glass-panel interactive shimmer s1-btn" id="s1Btn">
+          Trigger Island
+        </div>
+      </div>
+
+      <!-- Screen 1: Precision Slider -->
+      <div class="screen">
+        <div class="tilt-card s2-wrapper glass-panel shimmer">
+          <div class="s2-track-container interactive" id="s2Track">
+            <div class="s2-track-line"></div>
+            <div class="s2-dots" id="s2Dots"></div>
+            <div class="s2-thumb" id="s2Thumb"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 2: Crafting Flask -->
+      <div class="screen">
+        <div class="tilt-card glass-panel" style="padding: 40px; border-radius: 40px;">
+          <div class="s3-container">
+            <div class="s3-flask interactive" id="s3Flask">
+              <div class="s3-liquid" id="s3Liquid"></div>
+            </div>
+            <div class="s3-label">HOLD TO CRAFT</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 3: Magnetic Toggles -->
+      <div class="screen">
+        <div class="tilt-card s4-wrapper glass-panel shimmer" style="padding: 35px; border-radius: 35px;">
+          <div class="toggle-track interactive"><div class="toggle-thumb"></div></div>
+          <div class="toggle-track interactive"><div class="toggle-thumb"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ================= 1. SYSTEM INITIALIZATION & HAPTICS =================
+    const tg = window.Telegram?.WebApp;
+    if (tg) { 
+      tg.expand(); 
+      if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); 
+    }
+    document.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+
+    function haptic(type = 'light') {
+      try {
+        if (tg?.HapticFeedback) {
+          if (type === 'tick') tg.HapticFeedback.selectionChanged();
+          else if (type === 'heavy') tg.HapticFeedback.impactOccurred('rigid');
+          else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+          else tg.HapticFeedback.impactOccurred('light');
+        } else if (navigator.vibrate) {
+          if (type === 'tick') navigator.vibrate(5);
+          else if (type === 'heavy') navigator.vibrate([40]);
+          else if (type === 'success') navigator.vibrate([30, 50, 40]);
+          else navigator.vibrate(15);
+        }
+      } catch (e) {}
+    }
+
+    // ================= 2. DYNAMIC ISLAND LOGIC =================
+    const island = document.getElementById('dynamicIsland');
+    const islandText = document.getElementById('islandText');
+    let islandTimer;
+
+    function showIsland(msg) {
+      clearTimeout(islandTimer);
+      islandText.textContent = msg;
+      island.classList.add('expanded');
+      islandTimer = setTimeout(() => {
+        island.classList.remove('expanded');
+      }, 2500);
+    }
+
+    // ================= 3. 3D PARALLAX (TILT) =================
+    const contentArea = document.getElementById('contentArea');
+    let isDraggingControl = false; // Disable tilt while interacting with sliders/toggles
+
+    contentArea.addEventListener('pointermove', (e) => {
+      if(isDraggingControl) return;
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(!activeCard) return;
+
+      const rect = contentArea.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      
+      // Calculate rotation (max 15 degrees)
+      const rotX = -(y / rect.height) * 30;
+      const rotY = (x / rect.width) * 30;
+
+      activeCard.style.transform = `scale3d(1, 1, 1) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    });
+
+    contentArea.addEventListener('pointerleave', () => {
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(activeCard) activeCard.style.transform = `scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg)`;
+    });
+
+    // Reset tilt helper
+    function resetTilt() {
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(activeCard) activeCard.style.transform = `scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg)`;
+    }
+
+
+    // ================= 4. NAVIGATION SLIDER =================
+    const navTrack = document.getElementById('navTrack');
+    const navThumb = document.getElementById('navThumb');
+    const navDots = document.querySelectorAll('.nav-dot');
+    const screens = document.querySelectorAll('.screen');
+    const bgs = document.querySelectorAll('.bg-layer');
+    
+    let currentNavIdx = 0;
+    let dotPositions = [];
+    let isNavDragging = false;
+    let trackTopOffset = 0;
+
+    function initNav() {
+      const rect = navTrack.getBoundingClientRect();
+      trackTopOffset = rect.top;
+      dotPositions = Array.from(navDots).map(dot => {
+        const dRect = dot.getBoundingClientRect();
+        return (dRect.top - rect.top) + (dRect.height / 2);
+      });
+      snapNavTo(currentNavIdx, false);
+    }
+    window.addEventListener('resize', initNav);
+    setTimeout(initNav, 100);
+
+    function setScreen(idx) {
+      if(idx === currentNavIdx) return;
+      currentNavIdx = idx;
+      screens.forEach((s, i) => {
+        s.classList.toggle('active', i === idx);
+        // Reset tilt on hidden screens
+        const card = s.querySelector('.tilt-card');
+        if(card && i !== idx) card.style.transform = '';
+      });
+      bgs.forEach((bg, i) => bg.classList.toggle('active', i === idx));
+      navDots.forEach((dot, i) => dot.classList.toggle('active', i === idx));
+    }
+
+    function snapNavTo(idx, animate = true) {
+      const targetY = dotPositions[idx] - (navThumb.offsetHeight / 2);
+      navThumb.style.transition = animate ? 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none';
+      navThumb.style.transform = `translateY(${targetY}px)`;
+      setScreen(idx);
+    }
+
+    let lastCrossedNavIdx = 0;
+    navTrack.addEventListener('pointerdown', (e) => {
+      isNavDragging = true;
+      navTrack.setPointerCapture(e.pointerId);
+      navThumb.style.transition = 'none';
+      handleNavMove(e);
+    });
+
+    function handleNavMove(e) {
+      if (!isNavDragging) return;
+      const y = e.clientY - trackTopOffset;
+      let thumbY = y - (navThumb.offsetHeight / 2);
+      const minY = dotPositions[0] - (navThumb.offsetHeight / 2);
+      const maxY = dotPositions[3] - (navThumb.offsetHeight / 2);
+      thumbY = Math.max(minY, Math.min(maxY, thumbY));
+      navThumb.style.transform = `translateY(${thumbY}px)`;
+
+      let closestIdx = 0, minDiff = Infinity;
+      dotPositions.forEach((pos, i) => {
+        const diff = Math.abs(y - pos);
+        if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+      });
+
+      if (closestIdx !== lastCrossedNavIdx) {
+        haptic('tick'); 
+        lastCrossedNavIdx = closestIdx;
+        navDots.forEach((dot, i) => dot.classList.toggle('active', i === closestIdx));
+      }
+    }
+    navTrack.addEventListener('pointermove', handleNavMove);
+
+    const endNavDrag = () => {
+      if (!isNavDragging) return;
+      isNavDragging = false;
+      haptic('heavy');
+      snapNavTo(lastCrossedNavIdx, true);
+    };
+    navTrack.addEventListener('pointerup', endNavDrag);
+    navTrack.addEventListener('pointercancel', endNavDrag);
+
+
+    // ================= 5. SCREEN 0: ACTION BUTTON =================
+    const s1Btn = document.getElementById('s1Btn');
+    s1Btn.addEventListener('pointerdown', () => {
+      haptic('heavy');
+      s1Btn.classList.add('squish');
+    });
+    const s1End = () => {
+      if(s1Btn.classList.contains('squish')) {
+        s1Btn.classList.remove('squish');
+        showIsland('Action Triggered!');
+      }
+    };
+    s1Btn.addEventListener('pointerup', s1End);
+    s1Btn.addEventListener('pointercancel', s1End);
+    s1Btn.addEventListener('pointerleave', s1End);
+
+
+    // ================= 6. SCREEN 1: SPRING SLIDER =================
+    const s2Track = document.getElementById('s2Track');
+    const s2Thumb = document.getElementById('s2Thumb');
+    const s2DotsContainer = document.getElementById('s2Dots');
+    const stepsCount = 10;
+    let s2Dots = [];
+    
+    for(let i = 0; i <= stepsCount; i++) {
+      const d = document.createElement('div');
+      d.className = 's2-dot';
+      s2DotsContainer.appendChild(d);
+      s2Dots.push(d);
+    }
+    s2Dots[0].classList.add('active');
+
+    let s2Drag = false, s2CurrentStep = 0;
+    
+    s2Track.addEventListener('pointerdown', (e) => {
+      s2Drag = true; isDraggingControl = true; resetTilt();
+      s2Track.setPointerCapture(e.pointerId);
+      s2Thumb.style.transition = 'none'; // Follow finger exactly
+      handleS2Move(e);
+    });
+    
+    function handleS2Move(e) {
+      if (!s2Drag) return;
+      const rect = s2Track.getBoundingClientRect();
+      const maxX = rect.width - s2Thumb.clientWidth;
+      let x = e.clientX - rect.left - (s2Thumb.clientWidth / 2);
+      x = Math.max(0, Math.min(maxX, x));
+      s2Thumb.style.transform = `translateX(${x}px)`;
+
+      const percent = x / maxX;
+      const step = Math.round(percent * stepsCount);
+
+      if (step !== s2CurrentStep) {
+        haptic('tick'); 
+        s2Dots[s2CurrentStep].classList.remove('active');
+        s2CurrentStep = step;
+        s2Dots[s2CurrentStep].classList.add('active');
+      }
+    }
+    s2Track.addEventListener('pointermove', handleS2Move);
+    
+    const endS2Drag = () => {
+      if (!s2Drag) return; 
+      s2Drag = false; isDraggingControl = false;
+      const rect = s2Track.getBoundingClientRect();
+      const maxX = rect.width - s2Thumb.clientWidth;
+      const targetX = (s2CurrentStep / stepsCount) * maxX;
+      
+      // Apply OS Spring Physics for the snap
+      s2Thumb.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      s2Thumb.style.transform = `translateX(${targetX}px)`;
+    };
+    s2Track.addEventListener('pointerup', endS2Drag);
+    s2Track.addEventListener('pointercancel', endS2Drag);
+
+
+    // ================= 7. SCREEN 2: CRAFTING FLASK =================
+    const s3Flask = document.getElementById('s3Flask');
+    const s3Liquid = document.getElementById('s3Liquid');
+    const s3Container = document.querySelector('.s3-container');
+    const bgFlash = document.getElementById('bgFlash');
+    let fHold = false, fVal = 0, fCooldown = false, fAnimId;
+
+    function flaskLoop() {
+      if (!fHold || fCooldown) return;
+      fVal += 0.012; 
+      
+      if (fVal >= 1) {
+        fVal = 1; fHold = false; fCooldown = true; 
+        haptic('success');
+        s3Flask.classList.remove('pressing');
+        s3Liquid.style.transform = `scaleY(1)`;
+        
+        // Background pulse & Island integration
+        bgFlash.classList.add('flash');
+        showIsland('Item Crafted!');
+        
+        setTimeout(() => bgFlash.classList.remove('flash'), 100);
+
+        // Ring Burst
+        for(let i = 0; i < 2; i++) {
+          setTimeout(() => {
+            const ring = document.createElement('div');
+            ring.className = 'burst-ring';
+            s3Container.appendChild(ring);
+            setTimeout(() => ring.remove(), 800);
+          }, i * 120);
+        }
+        
+        // Cooldown reset
+        setTimeout(() => {
+          s3Liquid.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          s3Liquid.style.transform = `scaleY(0)`;
+          setTimeout(() => { 
+            s3Liquid.style.transition = 'none'; 
+            fVal = 0; fCooldown = false; 
+          }, 600);
+        }, 2000); 
+      } else {
+        s3Liquid.style.transform = `scaleY(${fVal})`;
+        fAnimId = requestAnimationFrame(flaskLoop);
+      }
+    }
+    
+    s3Flask.addEventListener('pointerdown', (e) => {
+      if(fCooldown) return; 
+      fHold = true; isDraggingControl = true; resetTilt();
+      s3Flask.setPointerCapture(e.pointerId);
+      s3Flask.classList.add('pressing');
+      haptic('light'); 
+      fAnimId = requestAnimationFrame(flaskLoop);
+    });
+    
+    const endFlask = () => {
+      fHold = false; isDraggingControl = false;
+      cancelAnimationFrame(fAnimId);
+      s3Flask.classList.remove('pressing');
+      if (fVal > 0 && fVal < 1 && !fCooldown) {
+        s3Liquid.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        s3Liquid.style.transform = `scaleY(0)`;
+        setTimeout(() => { s3Liquid.style.transition = 'none'; fVal = 0; }, 400);
+      }
+    };
+    s3Flask.addEventListener('pointerup', endFlask);
+    s3Flask.addEventListener('pointercancel', endFlask);
+
+
+    // ================= 8. SCREEN 3: MAGNETIC TOGGLES =================
+    document.querySelectorAll('.toggle-track').forEach(track => {
+      const thumb = track.querySelector('.toggle-thumb');
+      let tDrag = false, tStart = 0;
+      let maxT = 120 - 10 - 38; // Track width - padding - thumb width
+      let state = 0; 
+      
+      track.addEventListener('pointerdown', (e) => {
+        tDrag = true; isDraggingControl = true; resetTilt();
+        track.setPointerCapture(e.pointerId);
+        thumb.style.transition = 'width 0.2s ease'; // Allow squash, disable X transition
+        tStart = e.clientX;
+      });
+      
+      track.addEventListener('pointermove', (e) => {
+        if(!tDrag) return;
+        let diff = e.clientX - tStart;
+        let x = (state === 1 ? maxT : 0) + diff;
+        x = Math.max(0, Math.min(maxT, x));
+        thumb.style.transform = `translateX(${x}px)`;
+      });
+      
+      const tEnd = () => {
+        if(!tDrag) return; tDrag = false; isDraggingControl = false;
+        
+        const curX = parseFloat(thumb.style.transform.replace(/[^0-9.-]/g, '') || 0);
+        state = curX > (maxT / 2) ? 1 : 0;
+        
+        // Restore OS Spring Physics
+        thumb.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.2s ease';
+        thumb.style.transform = `translateX(${state === 1 ? maxT : 0}px)`;
+        track.classList.toggle('on', state === 1);
+        
+        haptic(state === 1 ? 'heavy' : 'light');
+      };
+      
+      track.addEventListener('pointerup', tEnd);
+      track.addEventListener('pointercancel', tEnd);
+    });
+
+  </script>
+</body>
+</html>
