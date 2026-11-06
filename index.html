@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Liquid Glass Pro</title>
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Font: Quicksand -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ================= БАЗОВЫЕ НАСТРОЙКИ ================= */
+    html, body {
+      margin: 0; padding: 0; overflow: hidden;
+      width: 100vw; height: 100vh; position: fixed;
+      font-family: 'Quicksand', sans-serif;
+      overscroll-behavior: none; touch-action: none; /* Запрет лупы и скролла */
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      background: #000;
+    }
+    * { box-sizing: border-box; }
+
+    .svg-filters { position: absolute; width: 0; height: 0; pointer-events: none; }
+
+    /* ================= 6 ФОНОВЫХ ТЕМ ================= */
+    .bg-layer {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.8s ease-in-out;
+    }
+    .bg-layer.active { opacity: 1; }
+
+    /* Нежные пастельные градиенты */
+    #bg0 { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
+    #bg1 { background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%); }
+    #bg2 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
+    #bg3 { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); }
+    #bg4 { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
+    #bg5 { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
+
+    /* ================= ЛАЙАУТ ================= */
+    .main-layout {
+      position: relative; z-index: 10;
+      display: flex; width: 100vw; height: 100vh;
+    }
+
+    /* Навигация СЛЕВА (15%) */
+    .left-nav { width: 15%; display: flex; justify-content: center; padding: 40px 0; }
+    
+    .glass-base {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+    }
+
+    .v-track { 
+      width: 14px; height: 100%; border-radius: 10px; 
+      position: relative; cursor: pointer; 
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    
+    /* Отсечки (визуальные точки на треке) */
+    .v-notch { width: 100%; height: 2px; background: rgba(255,255,255,0.4); border-radius: 2px; }
+    
+    .v-thumb {
+      position: absolute; left: -4px; right: -4px; height: 36px;
+      border-radius: 18px; background: rgba(255,255,255,0.95);
+      border: 1px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      top: 0; pointer-events: none; /* Управляется через трек */
+    }
+    .v-thumb.snapping { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* Контент СПРАВА (85%) */
+    .right-content { width: 85%; position: relative; }
+    .screen {
+      position: absolute; inset: 0; padding: 20px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transform: translateY(20px) scale(0.95);
+    }
+    .screen.active { opacity: 1; pointer-events: all; transform: translateY(0) scale(1); }
+
+    /* Зона глобального свайпа */
+    .swipe-layer { position: absolute; inset: 0; z-index: 1; }
+    .interactive-zone { position: relative; z-index: 5; }
+
+    /* ================= ЭКРАН 0: SPLIT PILL ================= */
+    .s0-gooey {
+      width: 200px; height: 100px; filter: url(#goo-2d);
+      display: flex; align-items: center; justify-content: center; position: relative;
+    }
+    .split-circle {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(255,255,255,0.85);
+      position: absolute;
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    /* Визуальная имитация "пилюли", когда круги вместе */
+
+    /* ================= ЭКРАН 1: INERTIAL ELLIPSE SLIDER ================= */
+    .h-track {
+      width: 80%; height: 16px; border-radius: 8px; position: relative;
+    }
+    .h-thumb {
+      width: 50px; height: 30px; border-radius: 15px; /* Эллипс */
+      background: #fff; position: absolute; top: -7px; left: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform-origin: center center;
+    }
+
+    /* ================= ЭКРАН 2: 2D GOOEY MERGE ================= */
+    .goo-pad {
+      width: 260px; height: 260px; border-radius: 30px;
+      filter: url(#goo-2d); position: relative; overflow: hidden;
+      background: rgba(255,255,255,0.1);
+    }
+    .goo-orb {
+      width: 70px; height: 70px; border-radius: 50%;
+      background: rgba(255,255,255,0.9); position: absolute;
+    }
+    #orb1 { left: 40px; top: 40px; }
+    #orb2 { right: 40px; bottom: 40px; }
+
+    /* ================= ЭКРАН 3: FLASK BURST ================= */
+    .flask-container { position: relative; display: flex; justify-content: center; align-items: center; }
+    .flask-btn {
+      width: 120px; height: 120px; border-radius: 60px;
+      position: relative; overflow: hidden;
+      display: flex; align-items: flex-end; z-index: 5;
+    }
+    .flask-fill {
+      width: 100%; height: 100%; background: rgba(255,255,255,0.85);
+      transform-origin: bottom; transform: scaleY(0); /* Без микрофризов */
+      will-change: transform;
+    }
+    /* Кольца-волны для Burst эффекта */
+    .burst-ring {
+      position: absolute; border: 3px solid rgba(255,255,255,0.8);
+      border-radius: 50%; opacity: 1; transform: scale(0.5); pointer-events: none;
+      animation: burstAnim 1s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes burstAnim {
+      100% { transform: scale(3); opacity: 0; border-width: 0px; }
+    }
+
+    /* ================= ЭКРАН 4: FIRM SNAP SWITCH ================= */
+    .switch-track {
+      width: 140px; height: 50px; border-radius: 25px;
+      position: relative; display: flex; align-items: center; padding: 0 5px;
+    }
+    .switch-thumb {
+      width: 40px; height: 40px; border-radius: 20px;
+      background: #fff; position: absolute; left: 5px;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* ================= ЭКРАН 5: REFRACTING RIPPLES ================= */
+    .s5-pad { width: 100%; height: 100%; position: absolute; inset: 0; overflow: hidden; }
+    
+    .refraction-glass {
+      width: 70%; height: 40%; border-radius: 24px;
+      position: absolute; top: 30%; left: 15%;
+      backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255,255,255,0.3);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      pointer-events: none; /* Пропускаем клики сквозь стекло на подложку */
+      z-index: 5;
+    }
+    
+    .wave-ring {
+      position: absolute; border: 2px solid rgba(255,255,255,0.6);
+      border-radius: 50%; transform: translate(-50%, -50%) scale(0);
+      pointer-events: none; z-index: 2; /* Волны под стеклом! */
+      animation: waveAnim 1.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes waveAnim {
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Чистый 2D Gooey Фильтр без 3D-артефактов -->
+  <svg class="svg-filters">
+    <defs>
+      <filter id="goo-2d">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo" />
+        <feBlend in="SourceGraphic" in2="goo" />
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- 6 Цветовых тем -->
+  <div id="bg0" class="bg-layer active"></div>
+  <div id="bg1" class="bg-layer"></div>
+  <div id="bg2" class="bg-layer"></div>
+  <div id="bg3" class="bg-layer"></div>
+  <div id="bg4" class="bg-layer"></div>
+  <div id="bg5" class="bg-layer"></div>
+
+  <div class="main-layout">
+    
+    <!-- Навигация СЛЕВА -->
+    <div class="left-nav">
+      <div class="v-track glass-base" id="vTrack">
+        <!-- Визуальные отсечки -->
+        <div class="v-notch"></div><div class="v-notch"></div><div class="v-notch"></div>
+        <div class="v-notch"></div><div class="v-notch"></div><div class="v-notch"></div>
+        <!-- Ползунок -->
+        <div class="v-thumb snapping" id="vThumb" style="transform: translateY(0px);"></div>
+      </div>
+    </div>
+
+    <!-- Контент СПРАВА -->
+    <div class="right-content">
+      <!-- Невидимый слой для глобальных свайпов -->
+      <div class="swipe-layer" id="swipeLayer"></div>
+
+      <!-- S0: Split Pill -->
+      <div class="screen active">
+        <div class="interactive-zone s0-gooey" id="splitBtn">
+          <div class="split-circle" id="s0-left"></div>
+          <div class="split-circle" id="s0-right"></div>
+        </div>
+      </div>
+
+      <!-- S1: Inertial Slider -->
+      <div class="screen">
+        <div class="interactive-zone h-track glass-base" id="hTrack">
+          <div class="h-thumb" id="hThumb"></div>
+        </div>
+      </div>
+
+      <!-- S2: 2D Gooey Merge -->
+      <div class="screen">
+        <div class="interactive-zone goo-pad" id="gooPad">
+          <div class="goo-orb" id="orb1"></div>
+          <div class="goo-orb" id="orb2"></div>
+        </div>
+      </div>
+
+      <!-- S3: Flask Burst -->
+      <div class="screen">
+        <div class="interactive-zone flask-container">
+          <div class="flask-btn glass-base" id="flaskBtn">
+            <div class="flask-fill" id="flaskFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- S4: Firm Snap Switch -->
+      <div class="screen">
+        <div class="interactive-zone switch-track glass-base" id="switchTrack">
+          <div class="switch-thumb" id="switchThumb"></div>
+        </div>
+      </div>
+
+      <!-- S5: Refracting Ripples -->
+      <div class="screen" style="padding: 0;">
+        <div class="s5-pad" id="ripplePad">
+          <div class="refraction-glass"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ================= СИСТЕМНЫЕ ФИКСЫ =================
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.expand(); tg.disableVerticalSwipes?.(); }
+    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+    // Haptics Helper (Только selectionChanged для навигации, и легкие для интерфейса)
+    function haptic(type = 'light') {
+      try { 
+        if(tg?.HapticFeedback) {
+          if(type === 'selection') tg.HapticFeedback.selectionChanged();
+          else tg.HapticFeedback.impactOccurred(type);
+        }
+      } catch(e){}
+    }
+
+    // ================= ГЛОБАЛЬНАЯ НАВИГАЦИЯ =================
+    const vTrack = document.getElementById('vTrack');
+    const vThumb = document.getElementById('vThumb');
+    const screens = document.querySelectorAll('.screen');
+    const bgs = document.querySelectorAll('.bg-layer');
+    const TOTAL_SCREENS = 6;
+    
+    let currentScreen = 0;
+    let vMaxY = 0;
+    let trackTop = 0;
+
+    function initNav() {
+      const rect = vTrack.getBoundingClientRect();
+      vMaxY = rect.height - vThumb.clientHeight;
+      trackTop = rect.top;
+      setScreen(currentScreen, false);
+    }
+    window.addEventListener('resize', initNav);
+    setTimeout(initNav, 100);
+
+    function setScreen(idx, animateThumb = true) {
+      if (idx < 0) idx = 0;
+      if (idx >= TOTAL_SCREENS) idx = TOTAL_SCREENS - 1;
+      
+      if (idx !== currentScreen) haptic('selection'); // Четкий виброотклик только при смене
+      currentScreen = idx;
+      
+      // Анимация экранов и фонов
+      screens.forEach((s, i) => s.classList.toggle('active', i === idx));
+      bgs.forEach((bg, i) => bg.classList.toggle('active', i === idx));
+
+      // Позиция ползунка
+      const targetY = (idx / (TOTAL_SCREENS - 1)) * vMaxY;
+      if (animateThumb) vThumb.classList.add('snapping');
+      vThumb.style.transform = `translateY(${targetY}px)`;
+    }
+
+    // Управление ползунком (Тап и Драг)
+    let isNavDrag = false;
+    vTrack.addEventListener('pointerdown', (e) => {
+      isNavDrag = true;
+      vTrack.setPointerCapture(e.pointerId);
+      vThumb.classList.remove('snapping');
+      processNavMove(e);
+    });
+    
+    function processNavMove(e) {
+      if (!isNavDrag) return;
+      let y = e.clientY - trackTop - (vThumb.clientHeight / 2);
+      y = Math.max(0, Math.min(vMaxY, y));
+      
+      // Определяем ближайшую отсечку
+      const sectionHeight = vMaxY / (TOTAL_SCREENS - 1);
+      const closestIdx = Math.round(y / sectionHeight);
+      
+      // Тянем ползунок за пальцем, но экран переключаем только при пересечении порога
+      vThumb.style.transform = `translateY(${y}px)`;
+      if (closestIdx !== currentScreen) setScreen(closestIdx, false);
+    }
+    vTrack.addEventListener('pointermove', processNavMove);
+    
+    const endNav = () => { 
+      if (!isNavDrag) return; 
+      isNavDrag = false; 
+      setScreen(currentScreen, true); // Примагничиваем к отсечке
+    };
+    vTrack.addEventListener('pointerup', endNav);
+    vTrack.addEventListener('pointercancel', endNav);
+
+    // Свайпы по экрану (SwipeLayer)
+    const swipeLayer = document.getElementById('swipeLayer');
+    let swipeStartY = 0;
+    swipeLayer.addEventListener('pointerdown', (e) => { swipeStartY = e.clientY; });
+    swipeLayer.addEventListener('pointerup', (e) => {
+      const deltaY = e.clientY - swipeStartY;
+      if (deltaY > 50) setScreen(currentScreen - 1, true);      // Свайп вниз -> предыдущий
+      else if (deltaY < -50) setScreen(currentScreen + 1, true); // Свайп вверх -> следующий
+    });
+
+    // ================= S0: SPLIT PILL =================
+    const splitBtn = document.getElementById('splitBtn');
+    const s0L = document.getElementById('s0-left');
+    const s0R = document.getElementById('s0-right');
+    
+    splitBtn.addEventListener('pointerdown', (e) => {
+      splitBtn.setPointerCapture(e.pointerId); haptic('light');
+      s0L.style.transform = 'translateX(-50px)';
+      s0R.style.transform = 'translateX(50px)';
+    });
+    const endSplit = () => {
+      s0L.style.transform = 'translateX(0)';
+      s0R.style.transform = 'translateX(0)';
+    };
+    splitBtn.addEventListener('pointerup', endSplit);
+    splitBtn.addEventListener('pointercancel', endSplit);
+
+    // ================= S1: INERTIAL ELLIPSE SLIDER =================
+    const hTrack = document.getElementById('hTrack');
+    const hThumb = document.getElementById('hThumb');
+    let hDrag = false, hMaxX = 0, lastHx = 0;
+
+    hTrack.addEventListener('pointerdown', (e) => {
+      hDrag = true; hTrack.setPointerCapture(e.pointerId);
+      hMaxX = hTrack.clientWidth - hThumb.clientWidth;
+      lastHx = e.clientX;
+      processHMove(e);
+    });
+    
+    function processHMove(e) {
+      if (!hDrag) return;
+      let x = e.clientX - hTrack.getBoundingClientRect().left - (hThumb.clientWidth / 2);
+      x = Math.max(0, Math.min(hMaxX, x));
+      
+      // Инерционное искажение эллипса
+      let velocity = Math.abs(e.clientX - lastHx);
+      // Слегка растягиваем (max 1.25), чтобы оставался техничным
+      let stretch = 1 + Math.min(velocity * 0.02, 0.25); 
+      
+      hThumb.style.transform = `translateX(${x}px) scaleX(${stretch})`;
+      lastHx = e.clientX;
+    }
+    hTrack.addEventListener('pointermove', processHMove);
+    
+    const endH = () => {
+      if (!hDrag) return; hDrag = false;
+      // Сбрасываем скейл, сохраняя позицию
+      const currentX = hThumb.style.transform.match(/translateX\((.*?)px\)/)[1];
+      hThumb.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      hThumb.style.transform = `translateX(${currentX}px) scaleX(1)`;
+      setTimeout(() => hThumb.style.transition = 'none', 300); // Очистка
+    };
+    hTrack.addEventListener('pointerup', endH);
+    hTrack.addEventListener('pointercancel', endH);
+
+    // ================= S2: 2D GOOEY MERGE =================
+    document.querySelectorAll('.goo-orb').forEach(orb => {
+      let gDrag = false, ox = 0, oy = 0;
+      orb.addEventListener('pointerdown', (e) => {
+        gDrag = true; orb.setPointerCapture(e.pointerId); haptic('light');
+        const rect = orb.getBoundingClientRect();
+        ox = e.clientX - rect.left; oy = e.clientY - rect.top;
+      });
+      orb.addEventListener('pointermove', (e) => {
+        if (!gDrag) return;
+        const pRect = orb.parentElement.getBoundingClientRect();
+        orb.style.left = (e.clientX - pRect.left - ox) + 'px';
+        orb.style.top = (e.clientY - pRect.top - oy) + 'px';
+      });
+      const endGoo = () => { gDrag = false; };
+      orb.addEventListener('pointerup', endGoo);
+      orb.addEventListener('pointercancel', endGoo);
+    });
+
+    // ================= S3: FLASK BURST =================
+    const flaskBtn = document.getElementById('flaskBtn');
+    const flaskFill = document.getElementById('flaskFill');
+    const flaskContainer = document.querySelector('.flask-container');
+    let fHold = false, fVal = 0, fCool = false, fAnim;
+
+    function loopFlask() {
+      if (!fHold || fCool) return;
+      fVal += 0.015; // 0.0 to 1.0 (ScaleY)
+      if (fVal >= 1) {
+        fVal = 1; fHold = false; fCool = true; haptic('heavy');
+        flaskFill.style.transform = `scaleY(1)`;
+        
+        // Создаем Burst кольца
+        for(let i=0; i<3; i++) {
+          setTimeout(() => {
+            const ring = document.createElement('div');
+            ring.className = 'burst-ring';
+            ring.style.width = '120px'; ring.style.height = '120px';
+            flaskContainer.appendChild(ring);
+            setTimeout(() => ring.remove(), 1000);
+          }, i * 150);
+        }
+        
+        // Сброс с кулдауном
+        setTimeout(() => {
+          flaskFill.style.transition = 'transform 0.4s ease-out';
+          flaskFill.style.transform = `scaleY(0)`;
+          setTimeout(() => { flaskFill.style.transition = 'none'; fVal = 0; fCool = false; }, 400);
+        }, 1500);
+      } else {
+        flaskFill.style.transform = `scaleY(${fVal})`;
+        fAnim = requestAnimationFrame(loopFlask);
+      }
+    }
+    flaskBtn.addEventListener('pointerdown', (e) => {
+      if(fCool) return; fHold = true; flaskBtn.setPointerCapture(e.pointerId);
+      haptic('light'); fAnim = requestAnimationFrame(loopFlask);
+    });
+    const endFlask = () => {
+      fHold = false; cancelAnimationFrame(fAnim);
+      if (fVal > 0 && fVal < 1 && !fCool) {
+        flaskFill.style.transition = 'transform 0.3s ease-out';
+        flaskFill.style.transform = `scaleY(0)`;
+        setTimeout(() => { flaskFill.style.transition = 'none'; fVal = 0; }, 300);
+      }
+    };
+    flaskBtn.addEventListener('pointerup', endFlask);
+    flaskBtn.addEventListener('pointercancel', endFlask);
+
+    // ================= S4: FIRM SNAP SWITCH =================
+    const sTrack = document.getElementById('switchTrack');
+    const sThumb = document.getElementById('switchThumb');
+    let swState = 0; // 0 - left, 1 - right
+    let swDrag = false, swStartX = 0, swMax = 90; // 140 - 10(padding) - 40(thumb)
+    
+    sTrack.addEventListener('pointerdown', (e) => {
+      swDrag = true; sTrack.setPointerCapture(e.pointerId);
+      sThumb.style.transition = 'none';
+      swStartX = e.clientX;
+    });
+    sTrack.addEventListener('pointermove', (e) => {
+      if(!swDrag) return;
+      let diff = e.clientX - swStartX;
+      let x = (swState === 1 ? swMax : 0) + diff;
+      x = Math.max(0, Math.min(swMax, x));
+      sThumb.style.transform = `translateX(${x}px)`;
+    });
+    const endSw = (e) => {
+      if(!swDrag) return; swDrag = false;
+      const currentX = parseFloat(sThumb.style.transform.replace(/[^0-9.-]/g, '') || 0);
+      
+      // Четкий снэп к краям
+      if (currentX > swMax / 2) swState = 1; else swState = 0;
+      
+      sThumb.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      sThumb.style.transform = `translateX(${swState === 1 ? swMax : 0}px)`;
+      haptic('light');
+    };
+    sTrack.addEventListener('pointerup', endSw);
+    sTrack.addEventListener('pointercancel', endSw);
+
+    // ================= S5: REFRACTING RIPPLES =================
+    const ripplePad = document.getElementById('ripplePad');
+    ripplePad.addEventListener('pointerdown', (e) => {
+      haptic('light');
+      const ring = document.createElement('div');
+      ring.className = 'wave-ring';
+      // Позиция относительно контейнера
+      const rect = ripplePad.getBoundingClientRect();
+      ring.style.left = (e.clientX - rect.left) + 'px';
+      ring.style.top = (e.clientY - rect.top) + 'px';
+      ring.style.width = '200px'; ring.style.height = '200px';
+      
+      ripplePad.appendChild(ring);
+      setTimeout(() => ring.remove(), 1500);
+    });
+
+  </script>
+</body>
+</html>
