@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Liquid Glass Hub</title>
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Font: Quicksand -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ================= БАЗОВЫЕ НАСТРОЙКИ & АНТИ-ЛУПА iOS ================= */
+    * {
+      box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation; /* Блок двойного тапа глобально */
+    }
+    
+    body {
+      font-family: 'Quicksand', sans-serif;
+      background-color: #fbf8fc;
+      color: #3d3b4f;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* Элементы, где нужен полный контроль жестов (свайпы, удержания) */
+    .drag-toggle, .v-slider-track, .hold-btn, .liquid-slider {
+      touch-action: none !important;
+    }
+
+    /* ================= ТЕМЫ И АНИМИРОВАННЫЙ ФОН ================= */
+    .ambient-bg {
+      position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none;
+    }
+    
+    .bg-layer {
+      position: absolute; inset: 0; opacity: 0;
+      transition: opacity 0.8s ease-in-out;
+    }
+    .bg-layer.active { opacity: 1; }
+
+    .blob {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.65;
+      animation: floatBg 15s infinite alternate ease-in-out;
+    }
+    @keyframes floatBg {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(30px, -40px) scale(1.1); }
+    }
+
+    /* Theme 0: Pastel */
+    #theme-0 .blob-1 { width: 340px; height: 340px; background: radial-gradient(circle, #ffe3ec, #ffd6e0); top: -10%; left: -10%; animation-delay: 0s; }
+    #theme-0 .blob-2 { width: 380px; height: 380px; background: radial-gradient(circle, #e2eafc, #c1d3fe); bottom: -10%; right: -10%; animation-delay: -5s; }
+    #theme-0 .blob-3 { width: 280px; height: 280px; background: radial-gradient(circle, #f3e8ff, #e9d5ff); top: 40%; left: 20%; animation-delay: -10s; }
+
+    /* Theme 1: Ocean */
+    #theme-1 .blob-1 { width: 340px; height: 340px; background: radial-gradient(circle, #d4f1f9, #a4cafe); top: -10%; left: -10%; animation-delay: 0s; }
+    #theme-1 .blob-2 { width: 380px; height: 380px; background: radial-gradient(circle, #b2f5ea, #81e6d9); bottom: -10%; right: -10%; animation-delay: -5s; }
+    #theme-1 .blob-3 { width: 280px; height: 280px; background: radial-gradient(circle, #ebf8ff, #bee3f8); top: 40%; left: 20%; animation-delay: -10s; }
+
+    /* Theme 2: Sunset */
+    #theme-2 .blob-1 { width: 340px; height: 340px; background: radial-gradient(circle, #ffdab9, #ffc2d1); top: -10%; left: -10%; animation-delay: 0s; }
+    #theme-2 .blob-2 { width: 380px; height: 380px; background: radial-gradient(circle, #ffdcb2, #ffb347); bottom: -10%; right: -10%; animation-delay: -5s; }
+    #theme-2 .blob-3 { width: 280px; height: 280px; background: radial-gradient(circle, #fff0f5, #ffb6c1); top: 40%; left: 20%; animation-delay: -10s; }
+
+    /* Theme 3: Mint */
+    #theme-3 .blob-1 { width: 340px; height: 340px; background: radial-gradient(circle, #c6f6d5, #9ae6b4); top: -10%; left: -10%; animation-delay: 0s; }
+    #theme-3 .blob-2 { width: 380px; height: 380px; background: radial-gradient(circle, #b2f5ea, #fefcbf); bottom: -10%; right: -10%; animation-delay: -5s; }
+    #theme-3 .blob-3 { width: 280px; height: 280px; background: radial-gradient(circle, #e6fffa, #b2f5ea); top: 40%; left: 20%; animation-delay: -10s; }
+
+    /* ================= СТИЛЬ СТЕКЛА ================= */
+    .glass {
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      box-shadow: 0 10px 30px rgba(180, 160, 200, 0.12), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+      border-radius: 28px;
+    }
+
+    /* ================= СТРУКТУРА: КОНТЕНТ (СЛЕВА) И СЛАЙДЕР (СПРАВА) ================= */
+    .main-layout {
+      position: relative; z-index: 1;
+      display: flex; width: 100%; height: 100%;
+    }
+
+    .content-area {
+      flex: 1; padding: 24px 10px 24px 20px;
+      position: relative; overflow-y: auto; overflow-x: hidden;
+    }
+
+    .screen {
+      display: none; flex-direction: column; gap: 20px;
+      animation: fadeInScreen 0.35s ease-out forwards;
+      opacity: 0; transform: scale(0.98);
+      position: absolute; top: 24px; left: 20px; right: 10px;
+    }
+    .screen.active { display: flex; }
+
+    @keyframes fadeInScreen {
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Вертикальный ползунок */
+    .v-slider-area {
+      width: 60px; padding: 24px 12px 24px 0;
+      display: flex; justify-content: center; align-items: center;
+    }
+
+    .v-slider-track {
+      width: 24px; height: 100%;
+      background: rgba(200, 200, 210, 0.25);
+      backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+      border-radius: 20px; border: 1px solid rgba(255,255,255,0.7);
+      box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+      position: relative; cursor: pointer;
+    }
+
+    .v-slider-thumb {
+      position: absolute; left: 2px; right: 2px; height: 48px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px; border: 1.5px solid rgba(255, 255, 255, 1);
+      box-shadow: 0 4px 10px rgba(100, 90, 110, 0.2);
+      top: 0; /* Управляется через JS */
+    }
+    .v-slider-thumb.snapping { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* ================= UI КОМПОНЕНТЫ ================= */
+    .screen-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 5px; }
+    .section-label { font-size: 13px; font-weight: 700; color: #7b7891; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-left: 5px; }
+
+    /* Жидкие кнопки */
+    .liquid-btn {
+      width: 100%; padding: 18px; font-family: inherit; font-size: 16px; font-weight: 700; color: #3b374d;
+      background: rgba(255, 255, 255, 0.25); border-radius: 22px; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.8);
+      box-shadow: 0 10px 20px rgba(160, 140, 180, 0.08), inset 0 1px 2px rgba(255, 255, 255, 0.8);
+      transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 10px;
+    }
+    .liquid-btn.pop-anim { animation: liquidPop 0.35s ease-out; }
+    @keyframes liquidPop {
+      0% { transform: scale(0.95) scaleX(1.03); border-radius: 30px 20px 30px 20px; background: rgba(255,255,255,0.5); }
+      50% { transform: scale(1.02) scaleX(0.98); border-radius: 20px 30px 20px 30px; }
+      100% { transform: scale(1) scaleX(1); }
+    }
+
+    /* Удержание (Hold-to-Confirm) FIX: Идеально круглые края у полоски */
+    .hold-btn {
+      position: relative; overflow: hidden; background: rgba(255,255,255,0.15);
+      padding: 24px; text-align: center; border-radius: 26px; border: 1.5px solid rgba(255,255,255,0.6);
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+    }
+    .hold-fill {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+      background: rgba(115, 103, 240, 0.3); border-right: 2px solid rgba(115, 103, 240, 0.8);
+      /* Начальное скругление только слева, чтобы не вылезать за рамки контейнера */
+      border-radius: 26px 0 0 26px; 
+      z-index: 1; pointer-events: none;
+    }
+    .hold-fill.snap-back { transition: width 0.3s ease-out; }
+    .hold-fill.full { border-radius: 26px; border-right: none; } /* Когда 100%, скругляем везде */
+    .hold-text { position: relative; z-index: 2; font-weight: 700; font-size: 16px; color: #3b374d; }
+
+    /* Окно Диалога */
+    .dialogue-card { padding: 24px; }
+    .dialogue-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .portrait { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #a8c0ff, #3f2b96); border: 3px solid rgba(255,255,255,0.9); box-shadow: 0 4px 15px rgba(63, 43, 150, 0.2); }
+    .char-name { font-size: 18px; font-weight: 700; }
+    .char-role { font-size: 12px; color: #7b7891; font-weight: 600; text-transform: uppercase; }
+    .dialogue-text { font-size: 15px; line-height: 1.5; color: #3d3b4f; background: rgba(255,255,255,0.3); padding: 16px; border-radius: 20px; margin-bottom: 20px; }
+
+    /* Настройки (Горизонтальный слайдер и тумблер) */
+    .settings-card { padding: 24px; display: flex; flex-direction: column; gap: 30px; }
+    .slider-header { display: flex; justify-content: space-between; margin-bottom: 12px;}
+    .slider-container { position: relative; height: 38px; display: flex; align-items: center; }
+    .dots-track { position: absolute; left: 14px; right: 14px; height: 6px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; z-index: 1; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(120, 110, 140, 0.3); transition: all 0.15s; }
+    .dot.active { background: #7367f0; transform: scale(1.5); }
+    .liquid-slider { -webkit-appearance: none; width: 100%; height: 12px; border-radius: 10px; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.8); outline: none; z-index: 2; }
+    .liquid-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 1px solid rgba(200,190,220,0.5); box-shadow: 0 4px 10px rgba(110,90,140,0.25); transition: transform 0.15s; cursor: pointer; }
+    .liquid-slider:active::-webkit-slider-thumb { transform: scale(1.15); }
+
+    .switch-row { display: flex; justify-content: space-between; align-items: center; }
+    .drag-toggle { position: relative; width: 72px; height: 40px; border-radius: 20px; background: rgba(230, 230, 240, 0.6); border: 1.5px solid rgba(255,255,255,0.8); transition: background 0.25s; }
+    .drag-toggle.is-on { background: rgba(147, 134, 250, 0.5); }
+    .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 31px; height: 31px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(100,80,130,0.2); transition: transform 0.2s, width 0.15s; pointer-events: none; }
+    .toggle-thumb.dragging { width: 38px; border-radius: 16px; }
+
+    /* Сетка инвентаря */
+    .inv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .inv-card { padding: 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; background: rgba(255,255,255,0.3); border-radius: 24px; border: 1px solid rgba(255,255,255,0.7); }
+    .inv-icon { font-size: 32px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+    .inv-name { font-weight: 700; font-size: 14px; }
+    .inv-qty { font-size: 12px; color: #7b7891; background: rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 10px; }
+  </style>
+</head>
+<body>
+
+  <!-- Фон: 4 темы для плавного crossfade -->
+  <div class="ambient-bg">
+    <div class="bg-layer active" id="theme-0">
+      <div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div>
+    </div>
+    <div class="bg-layer" id="theme-1">
+      <div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div>
+    </div>
+    <div class="bg-layer" id="theme-2">
+      <div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div>
+    </div>
+    <div class="bg-layer" id="theme-3">
+      <div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    
+    <!-- Зона экранов -->
+    <div class="content-area" id="contentArea">
+      
+      <!-- Экран 0: ХАБ -->
+      <div id="screen-0" class="screen active">
+        <h1 class="screen-title">Главная база</h1>
+        <p style="color: #7b7891; font-weight: 600;">Тема: Пастель (0/3)</p>
+        
+        <div style="margin-top: 30px;">
+          <div class="section-label">Секретная лаборатория</div>
+          <div class="hold-btn" id="craftBtn">
+            <div class="hold-fill" id="craftFill"></div>
+            <div class="hold-text" id="craftText">Зажмите для крафта</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Экран 1: ДИАЛОГ -->
+      <div id="screen-1" class="screen">
+        <h1 class="screen-title">Связь</h1>
+        <p style="color: #7b7891; font-weight: 600;">Тема: Океан (1/3)</p>
+        
+        <div class="dialogue-card glass">
+          <div class="dialogue-header">
+            <div class="portrait"></div>
+            <div>
+              <div class="char-name">Элизабет</div>
+              <div class="char-role">Главный инженер</div>
+            </div>
+          </div>
+          <div class="dialogue-text">
+            Системы переключены в водный режим. Капитан, мы готовы к погружению. Жду ваших указаний.
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="liquid-btn" onclick="btnPop(this)">Отложить запуск</button>
+            <button class="liquid-btn" onclick="btnPop(this)" style="background: rgba(115, 103, 240, 0.15); border-color: rgba(115, 103, 240, 0.4); color: #7367f0;">Начать погружение</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Экран 2: НАСТРОЙКИ -->
+      <div id="screen-2" class="screen">
+        <h1 class="screen-title">Настройки</h1>
+        <p style="color: #7b7891; font-weight: 600;">Тема: Закат (2/3)</p>
+        
+        <div class="settings-card glass">
+          <div>
+            <div class="slider-header">
+              <span class="section-label" style="margin:0;">Сенсоры</span>
+              <span id="sliderVal" style="font-weight: 700; color: #6a6485;">50%</span>
+            </div>
+            <div class="slider-container">
+              <div class="dots-track" id="dotsTrack">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <span class="dot"></span><span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+              <input type="range" min="0" max="100" step="1" value="50" class="liquid-slider" id="liquidSlider">
+            </div>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.5);">
+
+          <div class="switch-row">
+            <div>
+              <div class="section-label" style="margin:0;">Щиты</div>
+              <div style="font-size: 13px; color: #7b7891; padding-left: 5px;">Авто-защита</div>
+            </div>
+            <div class="drag-toggle" id="toggleTrack">
+              <div class="toggle-thumb" id="toggleThumb"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Экран 3: ИНВЕНТАРЬ -->
+      <div id="screen-3" class="screen">
+        <h1 class="screen-title">Склад</h1>
+        <p style="color: #7b7891; font-weight: 600;">Тема: Мята (3/3)</p>
+        
+        <div class="inv-grid">
+          <div class="inv-card">
+            <div class="inv-icon">🔋</div><div class="inv-name">Энергоблок</div><div class="inv-qty">x14</div>
+          </div>
+          <div class="inv-card">
+            <div class="inv-icon">🔧</div><div class="inv-name">Запчасти</div><div class="inv-qty">x82</div>
+          </div>
+          <div class="inv-card">
+            <div class="inv-icon">📜</div><div class="inv-name">Чертежи</div><div class="inv-qty">x3</div>
+          </div>
+          <div class="inv-card">
+            <div class="inv-icon">💎</div><div class="inv-name">Кристаллы</div><div class="inv-qty">x5</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Зона ползунка навигации -->
+    <div class="v-slider-area">
+      <div class="v-slider-track" id="vTrack">
+        <div class="v-slider-thumb snapping" id="vThumb" style="transform: translateY(0px);"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- ГЛОБАЛЬНАЯ БЛОКИРОВКА ЛУПЫ И ВЫДЕЛЕНИЯ ---
+    document.addEventListener('dblclick', function(event) {
+        event.preventDefault();
+    }, { passive: false });
+
+    // Инициализация Telegram WebApp
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    function hapticImpact(style = 'light') {
+      try { tg?.HapticFeedback ? tg.HapticFeedback.impactOccurred(style) : navigator.vibrate?.(style === 'heavy' ? 20 : 10); } catch(e){}
+    }
+    function hapticSelection() {
+      try { tg?.HapticFeedback ? tg.HapticFeedback.selectionChanged() : navigator.vibrate?.(5); } catch(e){}
+    }
+
+    // --- КНОПКА (Обычная) ---
+    window.btnPop = function(btn) {
+      hapticImpact('medium');
+      btn.classList.remove('pop-anim');
+      void btn.offsetWidth; 
+      btn.classList.add('pop-anim');
+    }
+
+    // --- ВЕРТИКАЛЬНЫЙ СЛАЙДЕР НАВИГАЦИИ И СМЕНА ТЕМ ---
+    const vTrack = document.getElementById('vTrack');
+    const vThumb = document.getElementById('vThumb');
+    const screens = document.querySelectorAll('.screen');
+    const themes = document.querySelectorAll('.bg-layer');
+    
+    let isDraggingV = false;
+    let currentVStep = 0; // от 0 до 3
+    let startY = 0;
+    let startThumbY = 0;
+    let maxH = 0;
+
+    function initVSlider() {
+      maxH = vTrack.offsetHeight - vThumb.offsetHeight;
+      snapVSlider(currentVStep, false);
+    }
+    window.addEventListener('resize', initVSlider);
+    // Вызов после рендера
+    setTimeout(initVSlider, 100);
+
+    function changeScreenAndTheme(step) {
+      if (step === currentVStep) return;
+      currentVStep = step;
+      hapticSelection();
+
+      // Смена экранов
+      screens.forEach((screen, i) => {
+        screen.classList.remove('active');
+        if (i === step) screen.classList.add('active');
+      });
+
+      // Смена тем (crossfade)
+      themes.forEach((theme, i) => {
+        theme.classList.remove('active');
+        if (i === step) theme.classList.add('active');
+      });
+    }
+
+    function snapVSlider(step, animate = true) {
+      const targetY = (step / 3) * maxH;
+      if (animate) vThumb.classList.add('snapping');
+      vThumb.style.transform = `translateY(${targetY}px)`;
+      changeScreenAndTheme(step);
+    }
+
+    function processVMove(newY) {
+      vThumb.style.transform = `translateY(${newY}px)`;
+      const step = Math.round((newY / maxH) * 3);
+      changeScreenAndTheme(step);
+    }
+
+    vTrack.addEventListener('pointerdown', (e) => {
+      isDraggingV = true;
+      vThumb.classList.remove('snapping');
+      vTrack.setPointerCapture(e.pointerId);
+      
+      const trackRect = vTrack.getBoundingClientRect();
+      // Если клик мимо ползунка - прыгаем
+      if (e.target === vTrack) {
+        let clickY = e.clientY - trackRect.top;
+        let newY = Math.max(0, Math.min(maxH, clickY - vThumb.offsetHeight/2));
+        startThumbY = newY;
+        startY = e.clientY;
+        processVMove(newY);
+      } else {
+        // Захват за ползунок
+        const currentTransform = new WebKitCSSMatrix(window.getComputedStyle(vThumb).transform);
+        startThumbY = currentTransform.m42;
+        startY = e.clientY;
+      }
+    });
+
+    vTrack.addEventListener('pointermove', (e) => {
+      if (!isDraggingV) return;
+      let delta = e.clientY - startY;
+      let newY = Math.max(0, Math.min(maxH, startThumbY + delta));
+      processVMove(newY);
+    });
+
+    const endVDrag = () => {
+      if (!isDraggingV) return;
+      isDraggingV = false;
+      hapticImpact('light');
+      snapVSlider(currentVStep, true);
+    };
+    vTrack.addEventListener('pointerup', endVDrag);
+    vTrack.addEventListener('pointercancel', endVDrag);
+
+
+    // --- УДЕРЖАНИЕ (CRAFT) С КУЛДАУНОМ И ИСПРАВЛЕННЫМИ УГЛАМИ ---
+    const craftBtn = document.getElementById('craftBtn');
+    const craftFill = document.getElementById('craftFill');
+    const craftText = document.getElementById('craftText');
+    
+    let holdProgress = 0;
+    let isHolding = false;
+    let isCooldown = false;
+    let holdAnimFrame;
+    let lastTick = 0;
+
+    function resetHold() {
+      isHolding = false;
+      cancelAnimationFrame(holdAnimFrame);
+      if (holdProgress > 0 && holdProgress < 100 && !isCooldown) {
+        craftFill.classList.add('snap-back');
+        craftFill.style.width = '0%';
+        holdProgress = 0;
+      }
+    }
+
+    function holdLoop() {
+      if (!isHolding || isCooldown) return;
+      
+      holdProgress += 1.5; 
+      
+      if (Math.floor(holdProgress) % 15 === 0 && holdProgress !== lastTick && holdProgress < 100) {
+        lastTick = holdProgress;
+        hapticSelection();
+      }
+
+      if (holdProgress >= 100) {
+        holdProgress = 100;
+        isHolding = false;
+        isCooldown = true; // Блокируем новые нажатия
+        
+        hapticImpact('heavy');
+        craftFill.classList.add('full'); // Идеально круглые углы при 100%
+        craftFill.style.width = '100%';
+        craftText.textContent = "Скрафчено! ✨";
+        craftBtn.style.background = "rgba(115, 103, 240, 0.4)";
+        
+        // Кулдаун 2 секунды перед сбросом
+        setTimeout(() => {
+          craftFill.classList.add('snap-back');
+          craftFill.classList.remove('full');
+          craftFill.style.width = '0%';
+          craftText.textContent = "Зажмите для крафта";
+          craftBtn.style.background = "rgba(255,255,255,0.15)";
+          
+          setTimeout(() => { 
+            holdProgress = 0; 
+            isCooldown = false; // Снимаем блокировку
+          }, 300);
+        }, 2000);
+
+      } else {
+        craftFill.style.width = holdProgress + '%';
+        holdAnimFrame = requestAnimationFrame(holdLoop);
+      }
+    }
+
+    craftBtn.addEventListener('pointerdown', (e) => {
+      if (isCooldown) return; // Не реагируем во время кулдауна
+      craftBtn.setPointerCapture(e.pointerId);
+      craftFill.classList.remove('snap-back'); 
+      craftFill.classList.remove('full');
+      isHolding = true;
+      holdProgress = 0;
+      lastTick = 0;
+      hapticImpact('light');
+      holdAnimFrame = requestAnimationFrame(holdLoop);
+    });
+    craftBtn.addEventListener('pointerup', resetHold);
+    craftBtn.addEventListener('pointercancel', resetHold);
+
+
+    // --- ГОРИЗОНТАЛЬНЫЙ СЛАЙДЕР НАСТРОЕК ---
+    const slider = document.getElementById('liquidSlider');
+    const sliderVal = document.getElementById('sliderVal');
+    const dots = document.querySelectorAll('#dotsTrack .dot');
+    let lastStep = 5;
+
+    slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      sliderVal.textContent = val + '%';
+      const step = Math.round(val / 10);
+      if (step !== lastStep) {
+        lastStep = step;
+        hapticSelection();
+        dots.forEach((d, i) => d.classList.toggle('active', i === step));
+      }
+    });
+
+    // --- ТУМБЛЕР ---
+    const track = document.getElementById('toggleTrack');
+    const thumb = document.getElementById('toggleThumb');
+    let isOn = false, isToggleDragging = false, startToggleX = 0, currentToggleX = 0;
+    const maxToggleTranslate = 32; 
+
+    function setToggle(state) {
+      isOn = state;
+      track.classList.toggle('is-on', isOn);
+      thumb.style.transform = `translateX(${isOn ? maxToggleTranslate : 0}px)`;
+      hapticImpact('light');
+    }
+
+    track.addEventListener('pointerdown', (e) => {
+      isToggleDragging = true; startToggleX = e.clientX; currentToggleX = isOn ? maxToggleTranslate : 0;
+      thumb.classList.add('dragging'); track.setPointerCapture(e.pointerId);
+    });
+    
+    track.addEventListener('pointermove', (e) => {
+      if (!isToggleDragging) return;
+      let newX = Math.max(0, Math.min(maxToggleTranslate, (isOn ? maxToggleTranslate : 0) + (e.clientX - startToggleX)));
+      thumb.style.transform = `translateX(${newX}px)`; currentToggleX = newX;
+    });
+    
+    const endToggleDrag = () => {
+      if (!isToggleDragging) return;
+      isToggleDragging = false; thumb.classList.remove('dragging');
+      setToggle(Math.abs(currentToggleX - (isOn ? maxToggleTranslate : 0)) < 6 ? !isOn : currentToggleX > maxToggleTranslate / 2);
+    };
+    
+    track.addEventListener('pointerup', endToggleDrag); 
+    track.addEventListener('pointercancel', endToggleDrag);
+
+  </script>
+</body>
+</html>
