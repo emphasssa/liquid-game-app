@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Glass Alchemy</title>
+
+  <!-- Google Font: Quicksand -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ================= 1. CRITICAL: KILL IOS MAGNIFIER & SYSTEM SCROLL ================= */
+    * { 
+      box-sizing: border-box; 
+      -webkit-user-select: none; 
+      user-select: none; 
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0; padding: 0; 
+      width: 100vw; height: 100vh;
+      overflow: hidden; 
+      background: #000;
+      font-family: 'Quicksand', sans-serif;
+      overscroll-behavior: none; 
+      touch-action: none; /* Kills all default pan/zoom gestures */
+    }
+
+    /* ================= 2. THEMES & BACKGROUND ================= */
+    .bg-layer {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.8s ease-in-out; z-index: 0;
+    }
+    .bg-layer.active { opacity: 1; }
+
+    /* Pastel alchemy themes */
+    #bg0 { background: linear-gradient(135deg, #d4b4fa 0%, #a4cfff 100%); } /* Lab: Purple/Blue */
+    #bg1 { background: linear-gradient(135deg, #9efacc 0%, #99defa 100%); } /* Upgrades: Mint/Cyan */
+    #bg2 { background: linear-gradient(135deg, #fcc9ed 0%, #ffe2b8 100%); } /* Artifacts: Pink/Peach */
+    #bg3 { background: linear-gradient(135deg, #b8cff1 0%, #e2eafc 100%); } /* Settings: Soft Steel */
+
+    .bg-flash {
+      position: absolute; inset: 0; background: #fff;
+      opacity: 0; pointer-events: none; z-index: 5;
+      transition: opacity 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .bg-flash.flash { opacity: 0.8; transition: none; }
+
+    /* ================= 3. UI COMPONENTS (Island, Resource, Glass) ================= */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1), inset 0 1px 2px rgba(255,255,255,0.4);
+    }
+
+    /* Shimmer Effect */
+    .shimmer { position: relative; overflow: hidden; }
+    .shimmer::after {
+      content: ''; position: absolute; top: 0; left: -150%; 
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      transform: skewX(-25deg);
+      animation: shimmerSweep 4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+    @keyframes shimmerSweep { 0% { left: -150%; } 50%, 100% { left: 200%; } }
+
+    /* Dynamic Island */
+    .dynamic-island {
+      position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+      width: 100px; height: 32px; border-radius: 16px;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+      z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+    }
+    .dynamic-island.expanded {
+      width: 200px; height: 44px; border-radius: 22px;
+      background: rgba(0, 0, 0, 0.85);
+    }
+    .island-content {
+      color: #fff; font-weight: 700; font-size: 14px;
+      opacity: 0; transform: scale(0.8) translateY(5px);
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+    }
+    .dynamic-island.expanded .island-content {
+      opacity: 1; transform: scale(1) translateY(0); transition-delay: 0.05s;
+    }
+
+    /* Resource Counter */
+    .resource-pill {
+      position: absolute; top: 15px; right: 15px;
+      padding: 6px 14px; border-radius: 20px;
+      font-weight: 700; font-size: 15px; color: #333;
+      z-index: 90; display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ================= 4. LAYOUT & NAVIGATION ================= */
+    .app-container {
+      position: relative; z-index: 10; 
+      display: flex; width: 100vw; height: 100vh;
+      perspective: 1000px;
+    }
+
+    /* Left Vertical Slider */
+    .left-nav {
+      width: 70px; height: 100%; display: flex; 
+      justify-content: center; align-items: center;
+      position: relative; z-index: 20;
+    }
+    .nav-track {
+      width: 20px; height: 200px; border-radius: 12px;
+      position: relative; display: flex; flex-direction: column;
+      justify-content: space-between; align-items: center;
+      padding: 12px 0; touch-action: none;
+    }
+    .nav-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s;
+    }
+    .nav-dot.active {
+      background: rgba(255, 255, 255, 1); transform: scale(2);
+      box-shadow: 0 0 10px rgba(255,255,255,0.8);
+    }
+    .nav-thumb {
+      position: absolute; left: -6px; 
+      width: 32px; height: 32px; border-radius: 16px; 
+      background: rgba(255, 255, 255, 0.95);
+      border: 1.5px solid #fff;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      top: 0; pointer-events: none; 
+      transform: translateY(0);
+    }
+
+    /* Main Content Area */
+    .content-area {
+      flex: 1; position: relative; display: flex;
+      justify-content: center; align-items: center;
+    }
+    .screen {
+      position: absolute; inset: 0; display: flex;
+      justify-content: center; align-items: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.5s ease;
+      z-index: 5;
+    }
+    .screen.active { opacity: 1; pointer-events: all; }
+
+    /* 3D Tilt Wrapper */
+    .tilt-card {
+      padding: 30px; border-radius: 36px;
+      transition: transform 0.15s ease-out; 
+      will-change: transform;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transform: rotateX(0) rotateY(0) scale3d(1, 1, 1);
+    }
+    .screen:not(.active) .tilt-card { 
+      transform: scale3d(0.9, 0.9, 0.9) translateY(20px); 
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); 
+    }
+    .screen.active .tilt-card { transform: scale3d(1, 1, 1) translateY(0); }
+
+    .interactive { pointer-events: all; position: relative; z-index: 10; touch-action: none; }
+    .screen-title { font-size: 22px; font-weight: 700; color: #444; margin-bottom: 25px; letter-spacing: 0.5px;}
+
+    /* ================= 5. SCREEN 0: LAB (Alchemy Flask) ================= */
+    .s0-container { position: relative; width: 160px; height: 160px; display: flex; justify-content: center; align-items: center; }
+    .s0-flask {
+      width: 120px; height: 120px; border-radius: 50%;
+      overflow: hidden; display: flex; align-items: flex-end;
+      position: relative; z-index: 10;
+      box-shadow: inset 0 -6px 20px rgba(255,255,255,0.7), 0 10px 30px rgba(0,0,0,0.1);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .s0-flask.pressing { transform: scale(0.92); }
+    .s0-liquid {
+      width: 100%; height: 100%; background: rgba(255,255,255,0.9);
+      transform-origin: bottom; transform: scaleY(0);
+      will-change: transform;
+    }
+    .s0-label {
+      position: absolute; bottom: -35px; color: #555; 
+      font-weight: 700; font-size: 14px; letter-spacing: 1px;
+    }
+    .burst-ring {
+      position: absolute; top: 50%; left: 50%;
+      width: 120px; height: 120px; border: 4px solid rgba(255,255,255,1);
+      border-radius: 50%; pointer-events: none; z-index: 5;
+      transform: translate(-50%, -50%) scale(1); opacity: 1;
+      animation: burstAnim 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes burstAnim { 100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; border-width: 0px; } }
+
+    /* ================= 6. SHARED CONTROLS (Toggles & Sliders) ================= */
+    .control-row {
+      display: flex; flex-direction: column; gap: 10px; width: 100%; margin-bottom: 25px;
+    }
+    .control-label { font-size: 15px; font-weight: 700; color: #555; }
+    
+    /* Magnetic Toggle */
+    .toggle-track {
+      width: 110px; height: 44px; border-radius: 22px;
+      position: relative; padding: 0 4px; display: flex; align-items: center;
+      transition: background 0.4s ease;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .toggle-track.on { background: rgba(255, 255, 255, 0.7); }
+    .toggle-thumb {
+      width: 36px; height: 36px; border-radius: 18px;
+      background: #fff; position: absolute; left: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.2s ease;
+    }
+    .toggle-track:active .toggle-thumb { width: 44px; } 
+
+    /* Horizontal Slider */
+    .slider-track {
+      position: relative; height: 34px; display: flex; align-items: center; width: 220px;
+    }
+    .slider-line {
+      position: absolute; left: 0; right: 0; height: 10px; 
+      border-radius: 5px; background: rgba(255, 255, 255, 0.25);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .slider-dots {
+      position: absolute; left: 0; right: 0; height: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+      pointer-events: none; padding: 0 6px;
+    }
+    .slider-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      transition: background 0.3s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .slider-dot.active { background: #fff; transform: scale(1.6); box-shadow: 0 0 5px #fff; }
+    .slider-thumb {
+      width: 44px; height: 28px; border-radius: 14px;
+      background: #fff; position: absolute; left: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      transform: translateX(0);
+    }
+
+    /* ================= 7. SCREEN 2: ARTIFACTS ================= */
+    .artifacts-grid { display: flex; gap: 15px; }
+    .artifact-card {
+      width: 100px; height: 140px; border-radius: 20px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+      font-size: 32px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+    .artifact-card span { font-size: 14px; font-weight: 700; color: #444; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Background Themes -->
+  <div id="bg0" class="bg-layer active"></div>
+  <div id="bg1" class="bg-layer"></div>
+  <div id="bg2" class="bg-layer"></div>
+  <div id="bg3" class="bg-layer"></div>
+  <div class="bg-flash" id="bgFlash"></div>
+
+  <!-- Dynamic Island -->
+  <div class="dynamic-island" id="dynamicIsland">
+    <div class="island-content" id="islandText">Notification</div>
+  </div>
+
+  <!-- Resource Counter -->
+  <div class="glass-panel resource-pill shimmer">
+    💧 <span id="resCount">0</span>
+  </div>
+
+  <div class="app-container" id="appContainer">
+    
+    <!-- Left Navigation -->
+    <div class="left-nav">
+      <div class="nav-track glass-panel shimmer" id="navTrack">
+        <div class="nav-dot active"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-dot"></div>
+        <div class="nav-thumb" id="navThumb"></div>
+      </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content-area" id="contentArea">
+
+      <!-- Screen 0: The Lab -->
+      <div class="screen active">
+        <div class="tilt-card">
+          <div class="screen-title">The Lab</div>
+          <div class="s0-container">
+            <div class="s0-flask glass-panel interactive shimmer" id="s0Flask">
+              <div class="s0-liquid" id="s0Liquid"></div>
+            </div>
+            <div class="s0-label">HOLD TO SYNTHESIZE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 1: Upgrades -->
+      <div class="screen">
+        <div class="tilt-card glass-panel shimmer" style="padding: 35px 25px;">
+          <div class="screen-title" style="margin-top:0;">Upgrades</div>
+          
+          <div class="control-row">
+            <div class="control-label">Auto-Extractor</div>
+            <div class="toggle-track interactive"><div class="toggle-thumb"></div></div>
+          </div>
+
+          <div class="control-row" style="margin-bottom:0;">
+            <div class="control-label">Flask Capacity</div>
+            <div class="slider-track interactive" id="capSlider">
+              <div class="slider-line"></div>
+              <div class="slider-dots" id="capDots"></div>
+              <div class="slider-thumb" id="capThumb"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 2: Artifacts -->
+      <div class="screen">
+        <div class="tilt-card">
+          <div class="screen-title">Artifacts</div>
+          <div class="artifacts-grid">
+            <div class="artifact-card glass-panel shimmer">
+              🔮 <span>Prism</span>
+            </div>
+            <div class="artifact-card glass-panel shimmer">
+              📜 <span>Scroll</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 3: Settings -->
+      <div class="screen">
+        <div class="tilt-card glass-panel shimmer" style="padding: 35px 30px;">
+          <div class="screen-title" style="margin-top:0;">Settings</div>
+          <div class="control-row">
+            <div class="control-label">Haptic Feedback</div>
+            <div class="toggle-track interactive on"><div class="toggle-thumb" style="transform: translateX(62px);"></div></div>
+          </div>
+          <div class="control-row" style="margin-bottom:0;">
+            <div class="control-label">Sound FX</div>
+            <div class="toggle-track interactive on"><div class="toggle-thumb" style="transform: translateX(62px);"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ================= 1. SYSTEM PROTECTIONS =================
+    // Kill double-tap to zoom on iOS Safari completely
+    document.addEventListener('dblclick', (e) => { e.preventDefault(); }, { passive: false });
+    // Kill gesture zoom (pinch)
+    document.addEventListener('gesturestart', (e) => { e.preventDefault(); });
+    // Prevent default touchmove to stop page bouncing, except on elements that explicitly need it (none here)
+    document.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+
+    // ================= 2. GAME STATE & HAPTICS =================
+    let resources = 0;
+    const resCountEl = document.getElementById('resCount');
+    let isHapticsEnabled = true;
+
+    function haptic(type = 'light') {
+      if (!isHapticsEnabled) return;
+      try {
+        if (navigator.vibrate) {
+          if (type === 'tick') navigator.vibrate(5);
+          else if (type === 'heavy') navigator.vibrate([40]);
+          else if (type === 'success') navigator.vibrate([30, 50, 40]);
+          else navigator.vibrate(15);
+        }
+      } catch (e) {}
+    }
+
+    // ================= 3. DYNAMIC ISLAND =================
+    const island = document.getElementById('dynamicIsland');
+    const islandText = document.getElementById('islandText');
+    let islandTimer;
+
+    function showIsland(msg) {
+      clearTimeout(islandTimer);
+      islandText.textContent = msg;
+      island.classList.add('expanded');
+      islandTimer = setTimeout(() => {
+        island.classList.remove('expanded');
+      }, 2500);
+    }
+
+    // ================= 4. 3D TILT (PARALLAX) =================
+    const contentArea = document.getElementById('contentArea');
+    let isDraggingControl = false; // Disable tilt during interactive drags
+
+    contentArea.addEventListener('pointermove', (e) => {
+      if(isDraggingControl) return;
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(!activeCard) return;
+
+      const rect = contentArea.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      
+      const rotX = -(y / rect.height) * 20;
+      const rotY = (x / rect.width) * 20;
+
+      activeCard.style.transform = `scale3d(1, 1, 1) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    });
+
+    contentArea.addEventListener('pointerleave', () => {
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(activeCard) activeCard.style.transform = `scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg)`;
+    });
+    
+    function resetTilt() {
+      const activeCard = document.querySelector('.screen.active .tilt-card');
+      if(activeCard) activeCard.style.transform = `scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg)`;
+    }
+
+    // ================= 5. NAVIGATION SLIDER =================
+    const navTrack = document.getElementById('navTrack');
+    const navThumb = document.getElementById('navThumb');
+    const navDots = document.querySelectorAll('.nav-dot');
+    const screens = document.querySelectorAll('.screen');
+    const bgs = document.querySelectorAll('.bg-layer');
+    
+    let currentNavIdx = 0;
+    let dotPositions = [];
+    let isNavDragging = false;
+    let trackTopOffset = 0;
+
+    function initNav() {
+      const rect = navTrack.getBoundingClientRect();
+      trackTopOffset = rect.top;
+      dotPositions = Array.from(navDots).map(dot => {
+        const dRect = dot.getBoundingClientRect();
+        return (dRect.top - rect.top) + (dRect.height / 2);
+      });
+      snapNavTo(currentNavIdx, false);
+    }
+    window.addEventListener('resize', initNav);
+    setTimeout(initNav, 100);
+
+    function setScreen(idx) {
+      if(idx === currentNavIdx) return;
+      currentNavIdx = idx;
+      screens.forEach((s, i) => {
+        s.classList.toggle('active', i === idx);
+        const card = s.querySelector('.tilt-card');
+        if(card && i !== idx) card.style.transform = '';
+      });
+      bgs.forEach((bg, i) => bg.classList.toggle('active', i === idx));
+      navDots.forEach((dot, i) => dot.classList.toggle('active', i === idx));
+    }
+
+    function snapNavTo(idx, animate = true) {
+      const targetY = dotPositions[idx] - (navThumb.offsetHeight / 2);
+      navThumb.style.transition = animate ? 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none';
+      navThumb.style.transform = `translateY(${targetY}px)`;
+      setScreen(idx);
+    }
+
+    let lastCrossedNavIdx = 0;
+    navTrack.addEventListener('pointerdown', (e) => {
+      isNavDragging = true;
+      navTrack.setPointerCapture(e.pointerId);
+      navThumb.style.transition = 'none';
+      handleNavMove(e);
+    });
+
+    function handleNavMove(e) {
+      if (!isNavDragging) return;
+      const y = e.clientY - trackTopOffset;
+      let thumbY = y - (navThumb.offsetHeight / 2);
+      const minY = dotPositions[0] - (navThumb.offsetHeight / 2);
+      const maxY = dotPositions[3] - (navThumb.offsetHeight / 2);
+      thumbY = Math.max(minY, Math.min(maxY, thumbY));
+      navThumb.style.transform = `translateY(${thumbY}px)`;
+
+      let closestIdx = 0, minDiff = Infinity;
+      dotPositions.forEach((pos, i) => {
+        const diff = Math.abs(y - pos);
+        if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+      });
+
+      if (closestIdx !== lastCrossedNavIdx) {
+        haptic('tick'); 
+        lastCrossedNavIdx = closestIdx;
+        navDots.forEach((dot, i) => dot.classList.toggle('active', i === closestIdx));
+      }
+    }
+    navTrack.addEventListener('pointermove', handleNavMove);
+
+    const endNavDrag = () => {
+      if (!isNavDragging) return;
+      isNavDragging = false;
+      haptic('heavy');
+      snapNavTo(lastCrossedNavIdx, true);
+    };
+    navTrack.addEventListener('pointerup', endNavDrag);
+    navTrack.addEventListener('pointercancel', endNavDrag);
+
+    // ================= 6. ALCHEMY LAB (Flask) =================
+    const s0Flask = document.getElementById('s0Flask');
+    const s0Liquid = document.getElementById('s0Liquid');
+    const s0Container = document.querySelector('.s0-container');
+    const bgFlash = document.getElementById('bgFlash');
+    let fHold = false, fVal = 0, fCooldown = false, fAnimId;
+
+    function flaskLoop() {
+      if (!fHold || fCooldown) return;
+      fVal += 0.015; // fill speed
+      
+      if (fVal >= 1) {
+        fVal = 1; fHold = false; fCooldown = true; 
+        haptic('success');
+        s0Flask.classList.remove('pressing');
+        s0Liquid.style.transform = `scaleY(1)`;
+        
+        // Add resources
+        resources += 50;
+        resCountEl.innerText = resources;
+        
+        // Effects
+        bgFlash.classList.add('flash');
+        showIsland('+50 Essence Extracted!');
+        setTimeout(() => bgFlash.classList.remove('flash'), 100);
+
+        // Glass Burst Rings
+        for(let i = 0; i < 2; i++) {
+          setTimeout(() => {
+            const ring = document.createElement('div');
+            ring.className = 'burst-ring';
+            s0Container.appendChild(ring);
+            setTimeout(() => ring.remove(), 800);
+          }, i * 150);
+        }
+        
+        // 2 Second Cooldown Reset
+        setTimeout(() => {
+          s0Liquid.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          s0Liquid.style.transform = `scaleY(0)`;
+          setTimeout(() => { 
+            s0Liquid.style.transition = 'none'; 
+            fVal = 0; fCooldown = false; 
+          }, 600);
+        }, 2000); 
+      } else {
+        s0Liquid.style.transform = `scaleY(${fVal})`;
+        fAnimId = requestAnimationFrame(flaskLoop);
+      }
+    }
+    
+    s0Flask.addEventListener('pointerdown', (e) => {
+      if(fCooldown) return; 
+      fHold = true; isDraggingControl = true; resetTilt();
+      s0Flask.setPointerCapture(e.pointerId);
+      s0Flask.classList.add('pressing');
+      haptic('light'); 
+      fAnimId = requestAnimationFrame(flaskLoop);
+    });
+    
+    const endFlask = () => {
+      fHold = false; isDraggingControl = false;
+      cancelAnimationFrame(fAnimId);
+      s0Flask.classList.remove('pressing');
+      if (fVal > 0 && fVal < 1 && !fCooldown) {
+        s0Liquid.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        s0Liquid.style.transform = `scaleY(0)`;
+        setTimeout(() => { s0Liquid.style.transition = 'none'; fVal = 0; }, 400);
+      }
+    };
+    s0Flask.addEventListener('pointerup', endFlask);
+    s0Flask.addEventListener('pointercancel', endFlask);
+
+    // ================= 7. TOGGLES =================
+    document.querySelectorAll('.toggle-track').forEach(track => {
+      const thumb = track.querySelector('.toggle-thumb');
+      let tDrag = false, tStart = 0;
+      const maxT = 110 - 8 - 36; // width - padding - thumb
+      
+      // Init state
+      let state = track.classList.contains('on') ? 1 : 0;
+      thumb.style.transform = `translateX(${state === 1 ? maxT : 0}px)`;
+
+      track.addEventListener('pointerdown', (e) => {
+        tDrag = true; isDraggingControl = true; resetTilt();
+        track.setPointerCapture(e.pointerId);
+        thumb.style.transition = 'width 0.2s ease'; 
+        tStart = e.clientX;
+      });
+      
+      track.addEventListener('pointermove', (e) => {
+        if(!tDrag) return;
+        let diff = e.clientX - tStart;
+        let x = (state === 1 ? maxT : 0) + diff;
+        x = Math.max(0, Math.min(maxT, x));
+        thumb.style.transform = `translateX(${x}px)`;
+      });
+      
+      const tEnd = () => {
+        if(!tDrag) return; tDrag = false; isDraggingControl = false;
+        
+        const curX = parseFloat(thumb.style.transform.replace(/[^0-9.-]/g, '') || 0);
+        state = curX > (maxT / 2) ? 1 : 0;
+        
+        thumb.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.2s ease';
+        thumb.style.transform = `translateX(${state === 1 ? maxT : 0}px)`;
+        track.classList.toggle('on', state === 1);
+        
+        haptic(state === 1 ? 'heavy' : 'light');
+
+        // Logic hook for Haptics toggle
+        const label = track.previousElementSibling?.innerText;
+        if(label === 'Haptic Feedback') {
+          isHapticsEnabled = (state === 1);
+        }
+      };
+      
+      track.addEventListener('pointerup', tEnd);
+      track.addEventListener('pointercancel', tEnd);
+    });
+
+    // ================= 8. HORIZONTAL SLIDER =================
+    const capSlider = document.getElementById('capSlider');
+    const capThumb = document.getElementById('capThumb');
+    const capDotsContainer = document.getElementById('capDots');
+    const stepsCount = 10;
+    let capDots = [];
+    
+    for(let i = 0; i <= stepsCount; i++) {
+      const d = document.createElement('div');
+      d.className = 'slider-dot';
+      capDotsContainer.appendChild(d);
+      capDots.push(d);
+    }
+    capDots[0].classList.add('active');
+
+    let capDrag = false, capCurrentStep = 0;
+    
+    capSlider.addEventListener('pointerdown', (e) => {
+      capDrag = true; isDraggingControl = true; resetTilt();
+      capSlider.setPointerCapture(e.pointerId);
+      capThumb.style.transition = 'none'; 
+      handleCapMove(e);
+    });
+    
+    function handleCapMove(e) {
+      if (!capDrag) return;
+      const rect = capSlider.getBoundingClientRect();
+      const maxX = rect.width - capThumb.clientWidth;
+      let x = e.clientX - rect.left - (capThumb.clientWidth / 2);
+      x = Math.max(0, Math.min(maxX, x));
+      capThumb.style.transform = `translateX(${x}px)`;
+
+      const percent = x / maxX;
+      const step = Math.round(percent * stepsCount);
+
+      if (step !== capCurrentStep) {
+        haptic('tick'); 
+        capDots[capCurrentStep].classList.remove('active');
+        capCurrentStep = step;
+        capDots[capCurrentStep].classList.add('active');
+      }
+    }
+    capSlider.addEventListener('pointermove', handleCapMove);
+    
+    const endCapDrag = () => {
+      if (!capDrag) return; 
+      capDrag = false; isDraggingControl = false;
+      const rect = capSlider.getBoundingClientRect();
+      const maxX = rect.width - capThumb.clientWidth;
+      const targetX = (capCurrentStep / stepsCount) * maxX;
+      
+      capThumb.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      capThumb.style.transform = `translateX(${targetX}px)`;
+    };
+    capSlider.addEventListener('pointerup', endCapDrag);
+    capSlider.addEventListener('pointercancel', endCapDrag);
+
+  </script>
+</body>
+</html>
