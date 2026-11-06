@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Glass Alchemy</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap');
+
+        /* Глобальный сброс и защиты */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #000;
+            overflow: hidden;
+            touch-action: none;
+            overscroll-behavior: none;
+            color: #fff;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+
+        /* Темные, "премиальные" градиенты фона */
+        .bg-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0a1122, #10152a, #0b1a1c);
+            z-index: 1;
+        }
+
+        /* Эффект Блика (Shimmer) */
+        @keyframes shimmer {
+            0% { transform: translateX(-150%) skewX(-30deg); }
+            20% { transform: translateX(250%) skewX(-30deg); }
+            100% { transform: translateX(250%) skewX(-30deg); }
+        }
+        .shimmer {
+            position: relative;
+            overflow: hidden;
+        }
+        .shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 50%; height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.2), transparent);
+            animation: shimmer 4s infinite;
+            pointer-events: none;
+        }
+
+        /* --- HUD (Верхняя панель) --- */
+        .hud {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            padding: 20px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 50;
+        }
+
+        /* Стеклянная капсула (база для профиля и валюты) */
+        .glass-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(15px);
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            transition: transform 0.1s ease;
+        }
+
+        /* Профиль */
+        .profile-pill {
+            padding: 5px 15px 5px 5px;
+        }
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            /* Голографический градиент вместо скучной заглушки */
+            background: linear-gradient(135deg, #00f2fe, #4facfe, #f093fb, #f5576c);
+            box-shadow: inset 0 0 5px rgba(255,255,255,0.5);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .nickname {
+            margin-left: 10px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #e0e0e0;
+            letter-spacing: 0.5px;
+        }
+
+        /* Валюта */
+        .currency-pill {
+            padding: 8px 15px;
+        }
+        .currency-icon {
+            font-size: 1.1rem;
+            margin-right: 6px;
+            filter: drop-shadow(0 0 5px rgba(100,200,255,0.5));
+        }
+        .currency-value {
+            font-weight: 700;
+            font-size: 1rem;
+            color: #fff;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        /* Анимация пульсации контейнера валюты */
+        @keyframes pulsePill {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+            100% { transform: scale(1); }
+        }
+        .pulse-anim {
+            animation: pulsePill 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* --- Тестовая зона по центру --- */
+        .test-zone {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 15px 30px;
+            color: #fff;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s;
+        }
+        .glass-btn:active {
+            transform: scale(0.9);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* --- Вылетающий текст --- */
+        .floating-text {
+            position: fixed;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: 700;
+            font-size: 1.5rem;
+            pointer-events: none;
+            z-index: 100;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            transform: translate(-50%, -50%); /* Центрируем относительно клика */
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -100px) scale(1.2); }
+        }
+        @keyframes floatDown {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, 100px) scale(1.2); }
+        }
+        .float-up {
+            color: #4ade80; /* Приятный зеленый */
+            animation: floatUp 0.8s ease-out forwards;
+        }
+        .float-down {
+            color: #f87171; /* Приятный красный */
+            animation: floatDown 0.8s ease-out forwards;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="bg-layer"></div>
+
+    <!-- HUD -->
+    <div class="hud">
+        <div class="glass-pill profile-pill shimmer">
+            <div class="avatar"></div>
+            <div class="nickname">Uchenik_AI</div>
+        </div>
+
+        <div class="glass-pill currency-pill shimmer" id="currencyPill">
+            <span class="currency-icon">💎</span>
+            <span class="currency-value" id="currencyValue">1,250</span>
+        </div>
+    </div>
+
+    <!-- Тестовые кнопки -->
+    <div class="test-zone">
+        <button class="glass-btn shimmer" onclick="addCurrency(100, event)">Тест +100</button>
+        <button class="glass-btn" onclick="removeCurrency(50, event)">Тест -50</button>
+    </div>
+
+    <script>
+        // --- Telegram & Защита ---
+        const tg = window.Telegram?.WebApp || {};
+        if (tg.expand) tg.expand();
+        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+
+        function triggerHaptic(style = 'light') {
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred(style);
+            } else if (navigator.vibrate) {
+                const times = { light: 5, medium: 15, heavy: 30 };
+                navigator.vibrate(times[style] || 10);
+            }
+        }
+
+        // --- Аудио Движок ---
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        document.body.addEventListener('touchstart', initAudio, { once: true });
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        function playSoftClick() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600 + Math.random() * 200, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playChime() {
+            if (!audioCtx) return;
+            const baseFreq = 440 + Math.random() * 100;
+            const chord = [1, 1.25, 1.5];
+            chord.forEach(multiplier => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq * multiplier, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.8);
+            });
+        }
+
+        // --- Игровая Экономика и Анимации ---
+        let actualCurrency = 1250;
+        let displayedCurrency = 1250;
+        let rollInterval = null;
+
+        const currencyValueEl = document.getElementById('currencyValue');
+        const currencyPillEl = document.getElementById('currencyPill');
+
+        function updateCurrencyDOM(val) {
+            currencyValueEl.innerText = Math.floor(val).toLocaleString('en-US');
+        }
+
+        function animateCurrency(target) {
+            clearInterval(rollInterval);
+            
+            // Запускаем CSS-пульсацию контейнера
+            currencyPillEl.classList.remove('pulse-anim');
+            void currencyPillEl.offsetWidth; // Магия: триггер reflow для перезапуска анимации
+            currencyPillEl.classList.add('pulse-anim');
+
+            const steps = 15; // За сколько кадров докрутим число
+            const stepValue = (target - displayedCurrency) / steps;
+            let currentStep = 0;
+
+            rollInterval = setInterval(() => {
+                displayedCurrency += stepValue;
+                currentStep++;
+                updateCurrencyDOM(displayedCurrency);
+                
+                // Звук и вибрация на каждый 3-й шаг накрутки, чтобы не оглушить
+                if (currentStep % 3 === 0) {
+                    playSoftClick();
+                    triggerHaptic('light');
+                }
+
+                if (currentStep >= steps) {
+                    clearInterval(rollInterval);
+                    displayedCurrency = target;
+                    updateCurrencyDOM(displayedCurrency);
+                }
+            }, 30);
+        }
+
+        function spawnFloatingText(amount, x, y) {
+            const el = document.createElement('div');
+            el.className = 'floating-text ' + (amount > 0 ? 'float-up' : 'float-down');
+            el.innerText = (amount > 0 ? '+' : '') + amount;
+            
+            // Если координаты не переданы (клик не мышкой), спавним по центру экрана
+            el.style.left = (x || window.innerWidth / 2) + 'px';
+            el.style.top = (y || window.innerHeight / 2) + 'px';
+            
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000); // Удаляем из DOM после анимации
+        }
+
+        // --- Публичные методы для тестирования ---
+        window.addCurrency = function(amount, event) {
+            initAudio(); // Подстраховка для разблокировки звука
+            actualCurrency += amount;
+            animateCurrency(actualCurrency);
+            
+            if (amount >= 100) playChime(); // Мажорный аккорд при крупном пополнении
+            
+            // Берем координаты клика. Для touch-устройств нужна дополнительная обработка, 
+            // но для тестов event.clientX/Y сойдет
+            let clientX = event?.clientX || event?.touches?.[0]?.clientX;
+            let clientY = event?.clientY || event?.touches?.[0]?.clientY;
+            
+            spawnFloatingText(amount, clientX, clientY);
+        }
+
+        window.removeCurrency = function(amount, event) {
+            initAudio();
+            if (actualCurrency < amount) return; // Проверка на минус, если нужно
+            
+            actualCurrency -= amount;
+            animateCurrency(actualCurrency);
+            
+            triggerHaptic('medium'); // Более жесткая отдача при трате
+            
+            let clientX = event?.clientX || event?.touches?.[0]?.clientX;
+            let clientY = event?.clientY || event?.touches?.[0]?.clientY;
+            
+            spawnFloatingText(-amount, clientX, clientY);
+        }
+    </script>
+</body>
+</html>
