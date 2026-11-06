@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Extreme Liquid Glass</title>
+  
+  <!-- Telegram WebApp SDK & Confetti -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    /* ================= СТРОГИЕ НАСТРОЙКИ (iOS / TG ФИКСЫ) ================= */
+    html, body {
+      margin: 0; padding: 0; overflow: hidden;
+      width: 100vw; height: 100vh; position: fixed;
+      overscroll-behavior: none; touch-action: none;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      background: #000;
+    }
+    
+    * { box-sizing: border-box; touch-action: none; }
+
+    /* ================= SVG ФИЛЬТРЫ СКРЫТЫ ИЗ ПОТОКА ================= */
+    .svg-filters { position: absolute; width: 0; height: 0; pointer-events: none; }
+
+    /* ================= ФОНЫ (6 ТЕМ) ================= */
+    .bg-layer {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .bg-layer.active { opacity: 1; }
+
+    #bg0 { background: radial-gradient(circle at 30% 30%, #e0c3fc, #8ec5fc); }
+    #bg1 { background: radial-gradient(circle at 70% 30%, #a18cd1, #fbc2eb); }
+    #bg2 { background: radial-gradient(circle at 50% 80%, #ff9a9e, #fecfef); }
+    #bg3 { background: radial-gradient(circle at 20% 70%, #4facfe, #00f2fe); }
+    #bg4 { background: radial-gradient(circle at 80% 20%, #43e97b, #38f9d7); }
+    #bg5 { background: radial-gradient(circle at 50% 50%, #fa709a, #fee140); }
+
+    /* ================= ЛАЙАУТ (СЕТКА) ================= */
+    .main-layout {
+      position: relative; z-index: 10;
+      display: flex; width: 100vw; height: 100vh;
+    }
+
+    /* ЛЕВАЯ ЧАСТЬ (85%) - КОНТЕЙНЕР ЭКРАНОВ */
+    .left-side { width: 85%; position: relative; }
+    .screen {
+      position: absolute; inset: 0; padding: 30px 15px 30px 30px;
+      opacity: 0; pointer-events: none;
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transform: scale(0.9);
+    }
+    .screen.active { opacity: 1; pointer-events: all; transform: scale(1); }
+
+    /* ПРАВАЯ ЧАСТЬ (15%) - ВЕРТИКАЛЬНЫЙ СЛАЙДЕР НАВИГАЦИИ */
+    .right-side { width: 15%; display: flex; justify-content: center; padding: 40px 0; }
+    
+    .glass-base {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1), inset 0 2px 5px rgba(255,255,255,0.3);
+    }
+
+    .v-track { width: 16px; height: 100%; border-radius: 20px; position: relative; cursor: pointer; }
+    .v-thumb {
+      position: absolute; left: -4px; right: -4px; height: 40px;
+      border-radius: 20px; background: rgba(255,255,255,0.9);
+      border: 2px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      top: 0;
+    }
+    .v-thumb.snapping { transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* ================= ЭКРАН 0: WARP BUTTON ================= */
+    /* Кнопка искажается с помощью SVG feDisplacementMap */
+    .warp-btn {
+      width: 160px; height: 160px; border-radius: 50%;
+      position: relative; display: flex; align-items: center; justify-content: center;
+      /* Фильтр применяется динамически через JS */
+      transform: translateZ(0); /* Аппаратное ускорение */
+    }
+    .warp-core {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: rgba(255,255,255,0.8);
+      box-shadow: 0 0 20px rgba(255,255,255,0.5);
+      transition: transform 0.2s;
+    }
+
+    /* ================= ЭКРАН 1: SLIME SLIDER ================= */
+    .slime-track {
+      width: 90%; height: 20px; border-radius: 10px;
+      position: relative; display: flex; align-items: center;
+    }
+    .slime-thumb {
+      width: 50px; height: 50px; border-radius: 25px;
+      background: rgba(255,255,255,0.95);
+      position: absolute; left: 0;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      transform-origin: center center;
+    }
+
+    /* ================= ЭКРАН 2: GOOEY MERGE ================= */
+    .gooey-container {
+      width: 100%; height: 300px; position: relative;
+      filter: url(#goo); /* SVG Фильтр слияния */
+      display: flex; align-items: center; justify-content: center;
+    }
+    .goo-ball {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      position: absolute;
+      box-shadow: inset 0 -5px 15px rgba(0,0,0,0.2);
+    }
+    #goo1 { left: 30%; top: 40%; }
+    #goo2 { left: 60%; top: 60%; }
+
+    /* ================= ЭКРАН 3: LIQUID FLASK ================= */
+    .flask {
+      width: 140px; height: 220px; border-radius: 70px;
+      position: relative; overflow: hidden;
+      filter: url(#warp-flask); /* Легкое искажение колбы */
+    }
+    .liquid-fill {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 0%;
+      background: rgba(255,255,255,0.8);
+      box-shadow: 0 -5px 20px rgba(255,255,255,0.5);
+    }
+    .flask-indicator {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.3);
+    }
+
+    /* ================= ЭКРАН 4: MAGNETIC SWITCH ================= */
+    .mag-track {
+      width: 120px; height: 240px; border-radius: 60px;
+      position: relative; display: flex; flex-direction: column;
+      align-items: center; justify-content: space-between; padding: 15px 0;
+    }
+    .mag-thumb {
+      width: 90px; height: 90px; border-radius: 45px;
+      background: #fff; position: absolute; top: 15px;
+      transform-origin: center center;
+    }
+
+    /* ================= ЭКРАН 5: RIPPLE PAD ================= */
+    .ripple-pad {
+      width: 90%; height: 70%; border-radius: 40px;
+      position: relative; overflow: hidden;
+    }
+    .rip-circle {
+      position: absolute; border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      transform: translate(-50%, -50%) scale(0);
+      pointer-events: none;
+      animation: ripAnim 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes ripAnim {
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- SVG Фильтры для жидких эффектов -->
+  <svg class="svg-filters">
+    <defs>
+      <!-- Gooey Filter: Размытие + Контраст альфа-канала -->
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur" />
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10" result="goo" />
+        <feBlend in="SourceGraphic" in2="goo" />
+      </filter>
+
+      <!-- Warp Filter: Искажение для кнопки -->
+      <filter id="warp">
+        <feTurbulence type="fractalNoise" baseFrequency="0" numOctaves="2" result="noise" id="feTurb"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" id="feDisp"/>
+      </filter>
+
+      <!-- Мягкий Warp для колбы -->
+      <filter id="warp-flask">
+        <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- Фоны -->
+  <div id="bg0" class="bg-layer active"></div>
+  <div id="bg1" class="bg-layer"></div>
+  <div id="bg2" class="bg-layer"></div>
+  <div id="bg3" class="bg-layer"></div>
+  <div id="bg4" class="bg-layer"></div>
+  <div id="bg5" class="bg-layer"></div>
+
+  <div class="main-layout">
+    
+    <!-- Левая часть: 6 Экранов -->
+    <div class="left-side">
+      
+      <!-- Screen 0: Warp Button -->
+      <div id="screen-0" class="screen active">
+        <div class="warp-btn glass-base" id="warpBtn" style="filter: url(#warp);">
+          <div class="warp-core" id="warpCore"></div>
+        </div>
+      </div>
+
+      <!-- Screen 1: Slime Slider -->
+      <div id="screen-1" class="screen">
+        <div class="slime-track glass-base" id="sTrack">
+          <div class="slime-thumb" id="sThumb"></div>
+        </div>
+      </div>
+
+      <!-- Screen 2: Gooey Merge -->
+      <div id="screen-2" class="screen">
+        <div class="gooey-container">
+          <div class="goo-ball" id="goo1"></div>
+          <div class="goo-ball" id="goo2"></div>
+        </div>
+      </div>
+
+      <!-- Screen 3: Liquid Flask -->
+      <div id="screen-3" class="screen">
+        <div class="flask glass-base" id="flaskBtn">
+          <div class="flask-indicator" id="flaskInd"></div>
+          <div class="liquid-fill" id="flaskFill"></div>
+        </div>
+      </div>
+
+      <!-- Screen 4: Magnetic Switch -->
+      <div id="screen-4" class="screen">
+        <div class="mag-track glass-base" id="mTrack">
+          <div class="mag-thumb" id="mThumb" style="transform: translateY(0px);"></div>
+        </div>
+      </div>
+
+      <!-- Screen 5: Ripple Pad -->
+      <div id="screen-5" class="screen">
+        <div class="ripple-pad glass-base" id="rPad"></div>
+      </div>
+
+    </div>
+
+    <!-- Правая часть: Вертикальный ползунок (0-5) -->
+    <div class="right-side">
+      <div class="v-track glass-base" id="vTrack">
+        <div class="v-thumb snapping" id="vThumb" style="transform: translateY(0px);"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ================= СИСТЕМНЫЕ ФИКСЫ =================
+    const tg = window.Telegram?.WebApp;
+    if(tg) { tg.expand(); tg.disableVerticalSwipes?.(); }
+    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+    // Haptics & Audio
+    function haptic(type = 'light') {
+      try { tg?.HapticFeedback ? tg.HapticFeedback.impactOccurred(type) : navigator.vibrate?.(type === 'heavy' ? 50 : 10); } catch(e){}
+    }
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSynth() {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const t = audioCtx.currentTime;
+      [440, 554.37, 659.25, 880].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.frequency.value = freq; osc.type = 'sine';
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(0, t + i*0.05);
+        gain.gain.linearRampToValueAtTime(0.3, t + i*0.05 + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + i*0.05 + 0.5);
+        osc.start(t + i*0.05); osc.stop(t + i*0.05 + 0.5);
+      });
+    }
+
+    // ================= НАВИГАЦИЯ (0-5) =================
+    const vTrack = document.getElementById('vTrack');
+    const vThumb = document.getElementById('vThumb');
+    let vDrag = false, vMaxY = 0, currentScreen = 0;
+
+    function initNav() {
+      vMaxY = vTrack.clientHeight - vThumb.clientHeight;
+      setNav(currentScreen, false);
+    }
+    window.addEventListener('resize', initNav);
+    setTimeout(initNav, 100);
+
+    function switchScreen(idx) {
+      if(currentScreen === idx) return;
+      currentScreen = idx; haptic('light');
+      document.querySelectorAll('.screen').forEach((s, i) => s.classList.toggle('active', i === idx));
+      document.querySelectorAll('.bg-layer').forEach((bg, i) => bg.classList.toggle('active', i === idx));
+    }
+    function setNav(idx, anim = true) {
+      const ty = (idx / 5) * vMaxY;
+      if(anim) vThumb.classList.add('snapping');
+      vThumb.style.transform = `translateY(${ty}px)`;
+      switchScreen(idx);
+    }
+    vTrack.addEventListener('pointerdown', (e) => {
+      vDrag = true; vThumb.classList.remove('snapping');
+      vTrack.setPointerCapture(e.pointerId); processNavMove(e);
+    });
+    function processNavMove(e) {
+      if(!vDrag) return;
+      let y = e.clientY - vTrack.getBoundingClientRect().top - (vThumb.clientHeight/2);
+      y = Math.max(0, Math.min(vMaxY, y));
+      vThumb.style.transform = `translateY(${y}px)`;
+      switchScreen(Math.round((y / vMaxY) * 5));
+    }
+    vTrack.addEventListener('pointermove', processNavMove);
+    const endNav = () => { if(!vDrag) return; vDrag = false; setNav(currentScreen, true); };
+    vTrack.addEventListener('pointerup', endNav); vTrack.addEventListener('pointercancel', endNav);
+
+    // ================= SCREEN 0: WARP BUTTON =================
+    const wBtn = document.getElementById('warpBtn'), wCore = document.getElementById('warpCore');
+    const feDisp = document.getElementById('feDisp'), feTurb = document.getElementById('feTurb');
+    let wAnim, wVal = 0, wTarget = 0;
+    
+    function warpLoop() {
+      wVal += (wTarget - wVal) * 0.15;
+      feDisp.setAttribute('scale', wVal);
+      feTurb.setAttribute('baseFrequency', wVal > 5 ? '0.05' : '0');
+      if(Math.abs(wTarget - wVal) > 0.1 || wTarget > 0) wAnim = requestAnimationFrame(warpLoop);
+    }
+    wBtn.addEventListener('pointerdown', (e) => {
+      wBtn.setPointerCapture(e.pointerId); haptic('medium');
+      wTarget = 80; wCore.style.transform = 'scale(0.5)';
+      cancelAnimationFrame(wAnim); warpLoop();
+    });
+    const endWarp = () => { wTarget = 0; wCore.style.transform = 'scale(1)'; cancelAnimationFrame(wAnim); warpLoop(); };
+    wBtn.addEventListener('pointerup', endWarp); wBtn.addEventListener('pointercancel', endWarp);
+
+    // ================= SCREEN 1: SLIME SLIDER =================
+    const sTrack = document.getElementById('sTrack'), sThumb = document.getElementById('sThumb');
+    let sDrag = false, sX = 0, lastSX = 0, sMaxX = 0;
+    
+    sTrack.addEventListener('pointerdown', (e) => {
+      sDrag = true; sTrack.setPointerCapture(e.pointerId);
+      sMaxX = sTrack.clientWidth - sThumb.clientWidth;
+      lastSX = e.clientX; sMove(e);
+    });
+    function sMove(e) {
+      if(!sDrag) return;
+      let x = e.clientX - sTrack.getBoundingClientRect().left - 25;
+      x = Math.max(0, Math.min(sMaxX, x));
+      
+      // Вычисляем скорость для растяжения (slime effect)
+      let velocity = Math.abs(e.clientX - lastSX);
+      let scaleX = 1 + Math.min(velocity * 0.05, 1.5);
+      let scaleY = 1 - Math.min(velocity * 0.02, 0.4);
+      
+      sThumb.style.transform = `translateX(${x}px) scale(${scaleX}, ${scaleY})`;
+      lastSX = e.clientX;
+    }
+    sTrack.addEventListener('pointermove', sMove);
+    const endSlime = () => { if(sDrag) { sDrag = false; sThumb.style.transform = `translateX(${sThumb.style.transform.split('px')[0].split('(')[1]}px) scale(1,1)`; haptic('light'); } };
+    sTrack.addEventListener('pointerup', endSlime); sTrack.addEventListener('pointercancel', endSlime);
+
+    // ================= SCREEN 2: GOOEY MERGE =================
+    // Простая логика перетаскивания шариков внутри контейнера с фильтром
+    document.querySelectorAll('.goo-ball').forEach(ball => {
+      let gDrag = false, offsetX, offsetY;
+      ball.addEventListener('pointerdown', (e) => {
+        gDrag = true; ball.setPointerCapture(e.pointerId);
+        const r = ball.getBoundingClientRect();
+        offsetX = e.clientX - r.left; offsetY = e.clientY - r.top;
+        haptic('light');
+      });
+      ball.addEventListener('pointermove', (e) => {
+        if(!gDrag) return;
+        const pRect = ball.parentElement.getBoundingClientRect();
+        ball.style.left = (e.clientX - pRect.left - offsetX) + 'px';
+        ball.style.top = (e.clientY - pRect.top - offsetY) + 'px';
+      });
+      const endGoo = () => { gDrag = false; };
+      ball.addEventListener('pointerup', endGoo); ball.addEventListener('pointercancel', endGoo);
+    });
+
+    // ================= SCREEN 3: LIQUID FLASK =================
+    const fBtn = document.getElementById('flaskBtn'), fFill = document.getElementById('flaskFill');
+    const fInd = document.getElementById('flaskInd');
+    let fProg = 0, fHold = false, fCool = false, fAnim;
+    
+    function flaskLoop() {
+      if(!fHold || fCool) return;
+      fProg += 1.2;
+      if(fProg >= 100) {
+        fProg = 100; fHold = false; fCool = true;
+        fFill.style.height = '100%'; fInd.style.background = '#fff';
+        fBtn.style.transform = 'scale(1.1)'; // Визуальный warp-эффект
+        haptic('heavy'); playSynth();
+        confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 } });
+        
+        setTimeout(() => {
+          fProg = 0; fFill.style.transition = 'height 0.5s ease';
+          fFill.style.height = '0%'; fBtn.style.transform = 'scale(1)';
+          fInd.style.background = 'rgba(255,255,255,0.3)';
+          setTimeout(() => { fFill.style.transition = 'none'; fCool = false; }, 500);
+        }, 2000);
+      } else {
+        fFill.style.height = fProg + '%';
+        fAnim = requestAnimationFrame(flaskLoop);
+      }
+    }
+    const endFlask = () => {
+      fHold = false; cancelAnimationFrame(fAnim);
+      if(fProg > 0 && fProg < 100 && !fCool) {
+        fFill.style.transition = 'height 0.3s'; fFill.style.height = '0%';
+        fProg = 0; setTimeout(() => fFill.style.transition = 'none', 300);
+      }
+    };
+    fBtn.addEventListener('pointerdown', (e) => {
+      if(fCool) return; fHold = true; fBtn.setPointerCapture(e.pointerId);
+      haptic('light'); if(audioCtx.state === 'suspended') audioCtx.resume();
+      fAnim = requestAnimationFrame(flaskLoop);
+    });
+    fBtn.addEventListener('pointerup', endFlask); fBtn.addEventListener('pointercancel', endFlask);
+
+    // ================= SCREEN 4: MAGNETIC SWITCH =================
+    const mTrack = document.getElementById('mTrack'), mThumb = document.getElementById('mThumb');
+    let mDrag = false, mIsBottom = false, mMaxY = 120; // 240-90-30
+    
+    mTrack.addEventListener('pointerdown', (e) => {
+      mDrag = true; mTrack.setPointerCapture(e.pointerId); haptic('light');
+    });
+    mTrack.addEventListener('pointermove', (e) => {
+      if(!mDrag) return;
+      let y = e.clientY - mTrack.getBoundingClientRect().top - 45;
+      
+      // Эффект магнита: ползунок тянется за пальцем (stretch), но не отрывается до конца
+      let stretchY = mIsBottom ? Math.max(mMaxY - 40, Math.min(mMaxY, y)) : Math.max(0, Math.min(40, y));
+      let scaleY = 1 + Math.abs(y - (mIsBottom ? mMaxY : 0)) * 0.005;
+      mThumb.style.transition = 'none';
+      mThumb.style.transform = `translateY(${stretchY}px) scaleY(${Math.min(scaleY, 1.4)})`;
+    });
+    const endMag = (e) => {
+      if(!mDrag) return; mDrag = false;
+      let y = e.clientY - mTrack.getBoundingClientRect().top;
+      mIsBottom = y > 120; // Центр трека
+      mThumb.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      mThumb.style.transform = `translateY(${mIsBottom ? mMaxY : 0}px) scaleY(1)`;
+      haptic('medium');
+    };
+    mTrack.addEventListener('pointerup', endMag); mTrack.addEventListener('pointercancel', endMag);
+
+    // ================= SCREEN 5: RIPPLE PAD =================
+    const rPad = document.getElementById('rPad');
+    rPad.addEventListener('pointerdown', (e) => {
+      rPad.setPointerCapture(e.pointerId); haptic('light');
+      const r = document.createElement('div');
+      r.className = 'rip-circle';
+      r.style.left = (e.clientX - rPad.getBoundingClientRect().left) + 'px';
+      r.style.top = (e.clientY - rPad.getBoundingClientRect().top) + 'px';
+      r.style.width = r.style.height = '150px';
+      rPad.appendChild(r);
+      setTimeout(() => r.remove(), 1000);
+    });
+    rPad.addEventListener('pointermove', (e) => {
+      if(rPad.hasPointerCapture(e.pointerId) && Math.random() > 0.8) haptic('light'); // Легкий отклик при трении
+    });
+  </script>
+</body>
+</html>
